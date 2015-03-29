@@ -1,0 +1,5 @@
+v8.pc
+v8-3.32.3/out
+*.pyc
+.svn
+v8worker.test
