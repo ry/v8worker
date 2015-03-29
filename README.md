@@ -38,9 +38,9 @@ See `worker_test.go` for example usage for now.
 
 
 
-TODO. 
------
-
+TODO
+----
+- more tests
 - need ability to pass command line options to V8 when creating a worker (maybe before)
 - way to kill worker
 - get text of exception
