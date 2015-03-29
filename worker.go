@@ -11,13 +11,17 @@ import "errors"
 import "unsafe"
 
 type Message string // just JSON for now...
+
+// To receive messages from javascript...
 type RecieveMessageCallback func(msg Message)
 
+// This is a golang wrapper around a single V8 Isolate.
 type Worker struct {
 	cWorker *C.worker
 	cb      RecieveMessageCallback
 }
 
+// Return the V8 version E.G. "4.3.59"
 func Version() string {
 	return C.GoString(C.worker_version())
 }
@@ -29,6 +33,8 @@ func recvCb(msg_s *C.char, ptr unsafe.Pointer) {
 	worker.cb(msg)
 }
 
+// Creates a new worker, which corresponds to a V8 isolate. A single threaded
+// standalone execution context.
 func New(cb RecieveMessageCallback) *Worker {
 	worker := &Worker{
 		cb: cb,
@@ -40,6 +46,8 @@ func New(cb RecieveMessageCallback) *Worker {
 	return worker
 }
 
+// Load and executes a javascript file with the filename specified by
+// scriptName and the contents of the file specified by the param code.
 func (w *Worker) Load(scriptName string, code string) error {
 	scriptName_s := C.CString(scriptName)
 	code_s := C.CString(code)
@@ -51,6 +59,7 @@ func (w *Worker) Load(scriptName string, code string) error {
 	return nil
 }
 
+// Sends a message to a worker. The $recv callback in js will be called.
 func (w *Worker) Send(msg Message) error {
 	msg_s := C.CString(string(msg))
 	defer C.free(unsafe.Pointer(msg_s))

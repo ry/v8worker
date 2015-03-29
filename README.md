@@ -13,9 +13,11 @@ MIT License. Contributions welcome.
 Build
 -----
 
-Just run `make`, which will trigger a build of V8 and then do `make install`
+Run `make` to trigger a build of V8 and then do `make install`
 which will trigger `go install`. V8 is statically linked. It's only been tested
 on my OSX laptop so far - should be easily portable to linux tho.
+
+`make test` to build/run tests. Or just `go test`.
 
 Docs
 ----
@@ -31,9 +33,9 @@ See `worker_test.go` for example usage for now.
 
 
 
-TODO. 
------
-
+TODO
+----
+- more tests
 - need ability to pass command line options to V8 when creating a worker (maybe before)
 - way to kill worker
 - get text of exception
