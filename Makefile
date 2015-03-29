@@ -1,0 +1,29 @@
+version?=4.3.59
+target?=native # available: x64.debug, ia32.debug, ia32.release, x64.release
+
+v8.pc: v8
+	target=$(target) ./build.sh
+
+v8:
+	fetch v8
+	cd v8 && git checkout $(version) && gclient sync
+
+test: v8worker.test
+	./v8worker.test
+
+
+v8worker.test: v8.pc *.go *.cc *.h
+	go test -c
+
+install: v8.pc *.go *.cc *.h
+	go install
+
+
+clean:
+	rm -f v8.pc v8worker.test
+
+distclean: clean
+	rm -f .gclient .gclient_entries
+	rm -rf v8/
+
+.PHONY: install test clean distclean

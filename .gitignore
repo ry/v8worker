@@ -1,0 +1,8 @@
+v8.pc
+_gclient*
+v8
+.gclient*
+*.pyc
+*.swp
+.svn
+v8worker.test
