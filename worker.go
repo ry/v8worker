@@ -13,12 +13,12 @@ import "unsafe"
 type Message string // just JSON for now...
 
 // To receive messages from javascript...
-type RecieveMessageCallback func(msg Message)
+type ReceiveMessageCallback func(msg Message)
 
 // This is a golang wrapper around a single V8 Isolate.
 type Worker struct {
 	cWorker *C.worker
-	cb      RecieveMessageCallback
+	cb      ReceiveMessageCallback
 }
 
 // Return the V8 version E.G. "4.3.59"
@@ -35,7 +35,7 @@ func recvCb(msg_s *C.char, ptr unsafe.Pointer) {
 
 // Creates a new worker, which corresponds to a V8 isolate. A single threaded
 // standalone execution context.
-func New(cb RecieveMessageCallback) *Worker {
+func New(cb ReceiveMessageCallback) *Worker {
 	worker := &Worker{
 		cb: cb,
 	}
