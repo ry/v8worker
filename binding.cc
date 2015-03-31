@@ -223,7 +223,7 @@ int worker_send(worker* w, const char* msg) {
   return 0;
 }
 
-void v8_init () {
+void v8_init() {
   V8::Initialize();
 
   Platform* platform = platform::CreateDefaultPlatform();
