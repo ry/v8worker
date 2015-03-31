@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string>
+#include <sstream>
 #include "v8.h"
 #include "libplatform/libplatform.h"
 #include "binding.h"
@@ -12,6 +13,7 @@ struct worker_s {
   int x;
   void* data;
   worker_recv_cb cb;
+  worker_print_cb print;
   Isolate* isolate;
   std::string last_exception;
   Persistent<Function> recv;
@@ -86,6 +88,14 @@ void go_recv_cb(const char* msg, void* data) {
   recvCb((char*)msg, data);
 }
 
+void go_print_cb(const char* str, void* data) {
+  printCb((char*)str, data);
+}
+
+void c_print_cb(const char* str, void* data) {
+  printf("%s\n", str);
+  fflush(stdout);
+}
 
 const char* worker_version() {
   return V8::GetVersion();
@@ -130,20 +140,37 @@ int worker_load(worker* w, char* name_s, char* source_s) {
 }
 
 void Print(const FunctionCallbackInfo<Value>& args) {
+  std::stringstream out;
+
+  // Format string
   bool first = true;
   for (int i = 0; i < args.Length(); i++) {
     HandleScope handle_scope(args.GetIsolate());
     if (first) {
       first = false;
     } else {
-      printf(" ");
+      out << ' ';
     }
     String::Utf8Value str(args[i]);
     const char* cstr = ToCString(str);
-    printf("%s", cstr);
+    out << cstr;
   }
-  printf("\n");
-  fflush(stdout);
+
+  // Find print callback (which may be local_print_cb)
+  worker* w = NULL;
+  {
+    Isolate* isolate = args.GetIsolate();
+    w = static_cast<worker*>(isolate->GetData(0));
+    assert(w->isolate == isolate);
+
+    Locker locker(w->isolate);
+    HandleScope handle_scope(isolate);
+
+    Local<Context> context = Local<Context>::New(w->isolate, w->context);
+    Context::Scope context_scope(context);
+
+    w->print(out.str().c_str(), w->data);
+  }
 }
 
 // sets the recv callback.
@@ -230,7 +257,7 @@ void v8_init() {
   V8::InitializePlatform(platform);
 }
 
-worker* worker_new(worker_recv_cb cb, void* data) {
+worker* worker_new(worker_recv_cb cb, worker_print_cb print, void* data) {
   Isolate* isolate = Isolate::New();
   Locker locker(isolate);
   Isolate::Scope isolate_scope(isolate);
@@ -242,6 +269,7 @@ worker* worker_new(worker_recv_cb cb, void* data) {
   w->isolate->SetData(0, w);
   w->data = data;
   w->cb = cb;
+  w->print = print;
 
   Local<ObjectTemplate> global = ObjectTemplate::New(w->isolate);
 
