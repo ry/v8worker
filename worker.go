@@ -9,11 +9,15 @@ package v8worker
 import "C"
 import "errors"
 import "unsafe"
+import "sync"
 
 type Message string // just JSON for now...
 
 // To receive messages from javascript...
 type ReceiveMessageCallback func(msg Message)
+
+// Don't init V8 more than once.
+var initV8Once sync.Once
 
 // This is a golang wrapper around a single V8 Isolate.
 type Worker struct {
@@ -39,6 +43,10 @@ func New(cb ReceiveMessageCallback) *Worker {
 	worker := &Worker{
 		cb: cb,
 	}
+
+	initV8Once.Do(func() {
+		C.v8_init()
+	})
 
 	callback := C.worker_recv_cb(C.go_recv_cb)
 

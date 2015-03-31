@@ -11,6 +11,8 @@ typedef void (*worker_recv_cb)(const char* msg, void* data);
 
 const char* worker_version();
 
+void v8_init();
+
 worker* worker_new(worker_recv_cb cb, void* data);
 
 // returns nonzero on error
