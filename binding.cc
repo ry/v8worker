@@ -223,12 +223,14 @@ int worker_send(worker* w, const char* msg) {
   return 0;
 }
 
-worker* worker_new(worker_recv_cb cb, void* data) {
+void v8_init() {
   V8::Initialize();
 
   Platform* platform = platform::CreateDefaultPlatform();
   V8::InitializePlatform(platform);
+}
 
+worker* worker_new(worker_recv_cb cb, void* data) {
   Isolate* isolate = Isolate::New();
   Locker locker(isolate);
   Isolate::Scope isolate_scope(isolate);

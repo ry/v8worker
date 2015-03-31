@@ -56,3 +56,29 @@ func TestBasic(t *testing.T) {
 		t.Fatal("bad recvCount", recvCount)
 	}
 }
+
+func TestMultipleWorkers(t *testing.T) {
+	recvCount := 0
+	worker1 := New(func(msg Message) {
+		println("w1", msg)
+		recvCount++
+	})
+	worker2 := New(func(msg Message) {
+		println("w2", msg)
+		recvCount++
+	})
+
+	err := worker1.Load("1.js", `$send("hello1")`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = worker2.Load("2.js", `$send("hello2")`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if recvCount != 2 {
+		t.Fatal("bad recvCount", recvCount)
+	}
+}
