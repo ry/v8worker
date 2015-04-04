@@ -1,6 +1,8 @@
 v8worker
 ========
 
+[![Join the chat at https://gitter.im/ry/v8worker](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/ry/v8worker?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 Minimal golang binding to V8. This exposes a non-blocking message passing
 interface to the V8 javascript engine. Go and JavaScript interact by sending
 and receiving messages. V8 will block a thread (goroutine) only while it
