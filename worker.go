@@ -19,10 +19,14 @@ type ReceiveMessageCallback func(msg Message)
 // Don't init V8 more than once.
 var initV8Once sync.Once
 
+// To provide custom $print() handling
+type PrintCallback func(str string)
+
 // This is a golang wrapper around a single V8 Isolate.
 type Worker struct {
 	cWorker *C.worker
 	cb      ReceiveMessageCallback
+	print   PrintCallback
 }
 
 // Return the V8 version E.G. "4.3.59"
@@ -37,20 +41,43 @@ func recvCb(msg_s *C.char, ptr unsafe.Pointer) {
 	worker.cb(msg)
 }
 
+//export printCb
+func printCb(c_str *C.char, ptr unsafe.Pointer) {
+	str := C.GoString(c_str)
+	worker := (*Worker)(ptr)
+	worker.print(str)
+}
+
 // Creates a new worker, which corresponds to a V8 isolate. A single threaded
 // standalone execution context.
 func New(cb ReceiveMessageCallback) *Worker {
+	return NewCustomPrint(cb, nil)
+}
+
+// Creates a new worker, which corresponds to a V8 isolate. A single threaded
+// standalone execution context.
+// Additionally, allows a custom callback to be registered to handle $print()
+// calls.
+func NewCustomPrint(cb ReceiveMessageCallback, print PrintCallback) *Worker {
 	worker := &Worker{
-		cb: cb,
+		cb:    cb,
+		print: print,
 	}
 
 	initV8Once.Do(func() {
 		C.v8_init()
 	})
 
-	callback := C.worker_recv_cb(C.go_recv_cb)
+	recvCallback := C.worker_recv_cb(C.go_recv_cb)
 
-	worker.cWorker = C.worker_new(callback, unsafe.Pointer(worker))
+	var printCallback C.worker_print_cb
+	if print == nil {
+		printCallback = C.worker_print_cb(C.c_print_cb) // Print from C
+	} else {
+		printCallback = C.worker_print_cb(C.go_print_cb) // Print from user's Go
+	}
+
+	worker.cWorker = C.worker_new(recvCallback, printCallback, unsafe.Pointer(worker))
 	return worker
 }
 

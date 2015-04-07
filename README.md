@@ -1,8 +1,6 @@
 v8worker
 ========
 
-[![Join the chat at https://gitter.im/ry/v8worker](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/ry/v8worker?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-
 Minimal golang binding to V8. This exposes a non-blocking message passing
 interface to the V8 javascript engine. Go and JavaScript interact by sending
 and receiving messages. V8 will block a thread (goroutine) only while it
@@ -15,16 +13,11 @@ MIT License. Contributions welcome.
 Build
 -----
 
-You will need chrome's `depot_tools` to build. Follow the instructions here
-https://www.chromium.org/developers/how-tos/install-depot-tools
-
-Run `make` to trigger a download and build of V8. `make install` will trigger
-`go install`. V8 is statically linked. It's only been tested on my OSX laptop
-so far - should be easily portable to linux tho.
+Run `make` to trigger a build of V8 and then do `make install`
+which will trigger `go install`. V8 is statically linked. It's only been tested
+on my OSX laptop so far - should be easily portable to linux tho.
 
 `make test` to build/run tests. Or just `go test`.
-
-To build a debug version use `target=x64.debug make`
 
 Docs
 ----

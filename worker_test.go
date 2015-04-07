@@ -82,3 +82,20 @@ func TestMultipleWorkers(t *testing.T) {
 		t.Fatal("bad recvCount", recvCount)
 	}
 }
+
+func TestCustomPrint(t *testing.T) {
+	worker := NewCustomPrint(func(msg Message) {},
+		func(str string) {
+			println("Custom $print() implementation: ", str)
+		})
+
+	code := `
+		$print(1, 'two', null);
+		$print(['more', 'stuff']);
+	`
+
+	err := worker.Load("code.js", code)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
