@@ -23,6 +23,17 @@ const char* ToCString(const String::Utf8Value& value) {
   return *value ? *value : "<string conversion failed>";
 }
 
+class ArrayBufferAllocator : public ArrayBuffer::Allocator {
+ public:
+  virtual void* Allocate(size_t length) {
+    void* data = AllocateUninitialized(length);
+    return data == NULL ? data : memset(data, 0, length);
+  }
+  virtual void* AllocateUninitialized(size_t length) { return malloc(length); }
+  virtual void Free(void* data, size_t) { free(data); }
+};
+
+
 // Exception details will be appended to the first argument.
 std::string ExceptionString(Isolate* isolate, TryCatch* try_catch) {
   std::string out;
@@ -223,11 +234,15 @@ int worker_send(worker* w, const char* msg) {
   return 0;
 }
 
+static ArrayBufferAllocator array_buffer_allocator;
+
 void v8_init() {
   V8::Initialize();
 
   Platform* platform = platform::CreateDefaultPlatform();
   V8::InitializePlatform(platform);
+
+  V8::SetArrayBufferAllocator(&array_buffer_allocator);
 }
 
 worker* worker_new(worker_recv_cb cb, void* data) {
