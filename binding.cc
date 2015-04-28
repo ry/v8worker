@@ -37,15 +37,13 @@ class ArrayBufferAllocator : public ArrayBuffer::Allocator {
 // Exception details will be appended to the first argument.
 std::string ExceptionString(Isolate* isolate, TryCatch* try_catch) {
   std::string out;
-  size_t scratchSize = 100;
+  size_t scratchSize = 20;
   char scratch[scratchSize]; // just some scratch space for sprintf
 
   HandleScope handle_scope(isolate);
   String::Utf8Value exception(try_catch->Exception());
   const char* exception_string = ToCString(exception);
   
-  printf("exception string: %s\n", exception_string);
-
   Handle<Message> message = try_catch->Message();
 
   if (message.IsEmpty()) {
@@ -54,13 +52,16 @@ std::string ExceptionString(Isolate* isolate, TryCatch* try_catch) {
     out.append(exception_string);
     out.append("\n");
   } else {
-    // Print (filename):(line number): (message).
+    // Print (filename):(line number)
     String::Utf8Value filename(message->GetScriptOrigin().ResourceName());
     const char* filename_string = ToCString(filename);
     int linenum = message->GetLineNumber();
 
-    snprintf(scratch, scratchSize, "%s:%i: %s\n", filename_string, linenum, exception_string);
+    snprintf(scratch, scratchSize, "%i", linenum);
+    out.append(filename_string);
+    out.append(":");
     out.append(scratch);
+    out.append("\n");
 
     // Print line of source code.
     String::Utf8Value sourceline(message->GetSourceLine());
@@ -83,6 +84,9 @@ std::string ExceptionString(Isolate* isolate, TryCatch* try_catch) {
     if (stack_trace.length() > 0) {
       const char* stack_trace_string = ToCString(stack_trace);
       out.append(stack_trace_string);
+      out.append("\n");
+    } else {
+      out.append(exception_string);
       out.append("\n");
     }
   }
