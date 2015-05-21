@@ -23,10 +23,12 @@ libv8_snapshot=`find $outdir -name 'libv8_snapshot.a' | head -1`""
 
 # for Linux
 librt=''
+libdl=''
 start_group=''
 end_group=''
 if [ `go env | grep GOHOSTOS` == 'GOHOSTOS="linux"' ]; then
 	librt='-lrt'
+	libdl='-ldl'
 	start_group='-Wl,--start-group'
 	end_group='-Wl,--end-group'
 fi
@@ -43,4 +45,4 @@ Description: v8 javascript engine
 Version: $target
 Cflags: $libstdcpp -I`pwd`/v8/include -I`pwd`/v8/
 Libs: $libstdcpp $start_group $libv8_libbase $libv8_base $libv8_libplatform \
-$libv8_snapshot $end_group $librt" > v8.pc
+$libv8_snapshot $end_group $librt $libdl" > v8.pc
