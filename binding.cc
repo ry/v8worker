@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string>
+#include <cstring>
 #include "v8.h"
 #include "libplatform/libplatform.h"
 #include "binding.h"
