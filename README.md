@@ -20,7 +20,7 @@ https://www.chromium.org/developers/how-tos/install-depot-tools
 
 Run `make` to trigger a download and build of V8. `make install` will trigger
 `go install`. V8 is statically linked. It's only been tested on my OSX laptop
-so far - should be easily portable to linux tho.
+and x64 linux. Should be portable with some difficulty to windows.
 
 `make test` to build/run tests. Or just `go test`.
 
