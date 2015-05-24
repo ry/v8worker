@@ -1,14 +1,14 @@
 v8worker
 ========
 
-[![Join the chat at https://gitter.im/ry/v8worker](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/ry/v8worker?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-
 Minimal golang binding to V8. This exposes a non-blocking message passing
 interface to the V8 javascript engine. Go and JavaScript interact by sending
 and receiving messages. V8 will block a thread (goroutine) only while it
 computes javascript - it has no "syscalls" other than sending and receiving
 messages to Go. There are only three built in functions exposed to javascript:
 `$print(string)`, `$send(msg)`, and `$recv(callback)`. 
+
+[A presentation on this project](https://docs.google.com/presentation/d/1RgGVgLuP93mPZ0lqHhm7TOpxZBI3TEdAJQZzFqeleAE/edit?usp=sharing)
 
 MIT License. Contributions welcome.
 
