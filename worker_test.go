@@ -10,7 +10,7 @@ func TestVersion(t *testing.T) {
 
 func TestBasic(t *testing.T) {
 	recvCount := 0
-	worker := New(func(msg Message) {
+	worker := New(func(msg string) {
 		println("recv cb", msg)
 		if msg != "hello" {
 			t.Fatal("bad msg", msg)
@@ -59,11 +59,11 @@ func TestBasic(t *testing.T) {
 
 func TestMultipleWorkers(t *testing.T) {
 	recvCount := 0
-	worker1 := New(func(msg Message) {
+	worker1 := New(func(msg string) {
 		println("w1", msg)
 		recvCount++
 	})
-	worker2 := New(func(msg Message) {
+	worker2 := New(func(msg string) {
 		println("w2", msg)
 		recvCount++
 	})

@@ -11,10 +11,8 @@ import "errors"
 import "unsafe"
 import "sync"
 
-type Message string // just JSON for now...
-
 // To receive messages from javascript...
-type ReceiveMessageCallback func(msg Message)
+type ReceiveMessageCallback func(msg string)
 
 // Don't init V8 more than once.
 var initV8Once sync.Once
@@ -32,7 +30,7 @@ func Version() string {
 
 //export recvCb
 func recvCb(msg_s *C.char, ptr unsafe.Pointer) {
-	msg := Message(C.GoString(msg_s))
+	msg := C.GoString(msg_s)
 	worker := (*Worker)(ptr)
 	worker.cb(msg)
 }
@@ -59,6 +57,9 @@ func New(cb ReceiveMessageCallback) *Worker {
 func (w *Worker) Load(scriptName string, code string) error {
 	scriptName_s := C.CString(scriptName)
 	code_s := C.CString(code)
+	defer C.free(unsafe.Pointer(scriptName_s))
+	defer C.free(unsafe.Pointer(code_s))
+
 	r := C.worker_load(w.cWorker, scriptName_s, code_s)
 	if r != 0 {
 		errStr := C.GoString(C.worker_last_exception(w.cWorker))
@@ -68,7 +69,7 @@ func (w *Worker) Load(scriptName string, code string) error {
 }
 
 // Sends a message to a worker. The $recv callback in js will be called.
-func (w *Worker) Send(msg Message) error {
+func (w *Worker) Send(msg string) error {
 	msg_s := C.CString(string(msg))
 	defer C.free(unsafe.Pointer(msg_s))
 
