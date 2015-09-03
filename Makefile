@@ -5,7 +5,7 @@ v8.pc: v8
 	target=$(target) ./build.sh
 
 v8:
-	fetch v8
+	fetch --nohooks v8
 	cd v8 && git checkout $(version) && gclient sync
 
 test: v8worker.test
