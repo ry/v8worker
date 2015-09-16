@@ -13,10 +13,12 @@ struct worker_s {
   int x;
   void* data;
   worker_recv_cb cb;
+  worker_recvSync_cb req_cb;
   Isolate* isolate;
   std::string last_exception;
   Persistent<Function> recv;
   Persistent<Context> context;
+  Persistent<Function> recv_sync_handler;
 };
 
 // Extracts a C string from a V8 Utf8Value.
@@ -44,7 +46,7 @@ std::string ExceptionString(Isolate* isolate, TryCatch* try_catch) {
   HandleScope handle_scope(isolate);
   String::Utf8Value exception(try_catch->Exception());
   const char* exception_string = ToCString(exception);
-  
+
   Handle<Message> message = try_catch->Message();
 
   if (message.IsEmpty()) {
@@ -102,6 +104,9 @@ void go_recv_cb(const char* msg, void* data) {
   recvCb((char*)msg, data);
 }
 
+const char* go_recvSync_cb(const char* msg, void* data) {
+  return recvSyncCb((char*)msg, data);
+}
 
 const char* worker_version() {
   return V8::GetVersion();
@@ -165,7 +170,7 @@ void Print(const FunctionCallbackInfo<Value>& args) {
 // sets the recv callback.
 void Recv(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
-  worker* w = (worker*)isolate->GetData(0); 
+  worker* w = (worker*)isolate->GetData(0);
   assert(w->isolate == isolate);
 
   HandleScope handle_scope(isolate);
@@ -178,6 +183,23 @@ void Recv(const FunctionCallbackInfo<Value>& args) {
   Local<Function> func = Local<Function>::Cast(v);
 
   w->recv.Reset(isolate, func);
+}
+
+void RecvSync(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  worker* w = (worker*)isolate->GetData(0);
+  assert(w->isolate == isolate);
+
+  HandleScope handle_scope(isolate);
+
+  Local<Context> context = Local<Context>::New(w->isolate, w->context);
+  Context::Scope context_scope(context);
+
+  Local<Value> v = args[0];
+  assert(v->IsFunction());
+  Local<Function> func = Local<Function>::Cast(v);
+
+  w->recv_sync_handler.Reset(isolate, func);
 }
 
 // Called from javascript. Must route message to golang.
@@ -202,8 +224,35 @@ void Send(const FunctionCallbackInfo<Value>& args) {
     msg = ToCString(str);
   }
 
-  // XXX should we use Unlocker?  
+  // XXX should we use Unlocker?
   w->cb(msg.c_str(), w->data);
+}
+
+// Called from javascript using $request.
+// Must route message (string) to golang and send back message (string) as return value.
+void SendSync(const FunctionCallbackInfo<Value>& args) {
+  std::string msg;
+  worker* w = NULL;
+  {
+    Isolate* isolate = args.GetIsolate();
+    w = static_cast<worker*>(isolate->GetData(0));
+    assert(w->isolate == isolate);
+
+    Locker locker(w->isolate);
+    HandleScope handle_scope(isolate);
+
+    Local<Context> context = Local<Context>::New(w->isolate, w->context);
+    Context::Scope context_scope(context);
+
+    Local<Value> v = args[0];
+    assert(v->IsString());
+
+    String::Utf8Value str(v);
+    msg = ToCString(str);
+  }
+  const char* returnMsg = w->req_cb(msg.c_str(), w->data);
+  Local<String> returnV = String::NewFromUtf8(w->isolate, returnMsg);
+  args.GetReturnValue().Set(returnV);
 }
 
 // Called from golang. Must route message to javascript lang.
@@ -239,6 +288,36 @@ int worker_send(worker* w, const char* msg) {
   return 0;
 }
 
+// Called from golang. Must route message to javascript lang.
+// It will call the $recv_sync_handler callback function and return its string value.
+const char* worker_sendSync(worker* w, const char* msg) {
+  std::string out;
+  Locker locker(w->isolate);
+  Isolate::Scope isolate_scope(w->isolate);
+  HandleScope handle_scope(w->isolate);
+
+  Local<Context> context = Local<Context>::New(w->isolate, w->context);
+  Context::Scope context_scope(context);
+
+  Local<Function> recv_sync_handler = Local<Function>::New(w->isolate, w->recv_sync_handler);
+  if (recv_sync_handler.IsEmpty()) {
+    out.append("err: $recvSync not called");
+    return out.c_str();
+  }
+
+  Local<Value> args[1];
+  args[0] = String::NewFromUtf8(w->isolate, msg);
+  Local<Value> response_value = recv_sync_handler->Call(context->Global(), 1, args);
+
+  if (response_value->IsString()) {
+    String::Utf8Value response(response_value->ToString());
+    out.append(*response);
+  } else {
+    out.append("err: non-string return value");
+  }
+  return out.c_str();
+}
+
 static ArrayBufferAllocator array_buffer_allocator;
 
 void v8_init() {
@@ -250,7 +329,7 @@ void v8_init() {
   V8::SetArrayBufferAllocator(&array_buffer_allocator);
 }
 
-worker* worker_new(worker_recv_cb cb, void* data) {
+worker* worker_new(worker_recv_cb cb, worker_recvSync_cb recvSync_cb, void* data) {
   Isolate* isolate = Isolate::New();
   Locker locker(isolate);
   Isolate::Scope isolate_scope(isolate);
@@ -258,10 +337,11 @@ worker* worker_new(worker_recv_cb cb, void* data) {
 
   worker* w = new(worker);
   w->isolate = isolate;
-	w->isolate->SetCaptureStackTraceForUncaughtExceptions(true);
+  w->isolate->SetCaptureStackTraceForUncaughtExceptions(true);
   w->isolate->SetData(0, w);
   w->data = data;
   w->cb = cb;
+  w->req_cb = recvSync_cb;
 
   Local<ObjectTemplate> global = ObjectTemplate::New(w->isolate);
 
@@ -273,6 +353,12 @@ worker* worker_new(worker_recv_cb cb, void* data) {
 
   global->Set(String::NewFromUtf8(w->isolate, "$send"),
               FunctionTemplate::New(w->isolate, Send));
+
+  global->Set(String::NewFromUtf8(w->isolate, "$sendSync"),
+              FunctionTemplate::New(w->isolate, SendSync));
+
+  global->Set(String::NewFromUtf8(w->isolate, "$recvSync"),
+              FunctionTemplate::New(w->isolate, RecvSync));
 
   Local<Context> context = Context::New(w->isolate, NULL, global);
   w->context.Reset(w->isolate, context);
