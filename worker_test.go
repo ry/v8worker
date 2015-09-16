@@ -16,7 +16,7 @@ func TestBasic(t *testing.T) {
 			t.Fatal("bad msg", msg)
 		}
 		recvCount++
-	})
+	}, DiscardSendSync)
 
 	code := ` $print("ready"); `
 	err := worker.Load("code.js", code)
@@ -62,11 +62,11 @@ func TestMultipleWorkers(t *testing.T) {
 	worker1 := New(func(msg string) {
 		println("w1", msg)
 		recvCount++
-	})
+	}, DiscardSendSync)
 	worker2 := New(func(msg string) {
 		println("w2", msg)
 		recvCount++
-	})
+	}, DiscardSendSync)
 
 	err := worker1.Load("1.js", `$send("hello1")`)
 	if err != nil {
@@ -80,5 +80,69 @@ func TestMultipleWorkers(t *testing.T) {
 
 	if recvCount != 2 {
 		t.Fatal("bad recvCount", recvCount)
+	}
+}
+
+func TestRequestFromJS(t *testing.T) {
+	var caught string
+	worker := New(func(msg string) {
+		println("recv cb", msg)
+		caught = msg
+	}, func(msg string) string {
+		println("send sync exchange", msg)
+		return msg + " exchanged"
+	})
+	code := `
+	var response = $sendSync("ping"); 
+	$send(response);
+`
+	err := worker.Load("code.js", code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if caught != "ping exchanged" {
+		t.Fail()
+	}
+}
+
+func TestRequestFromGo(t *testing.T) {
+	var caught string
+	worker := New(func(msg string) {
+		println("recv cb", msg)
+		caught = msg
+	}, DiscardSendSync)
+	code := `
+	$recvSync(function(msg) {
+    		$send("in recvSync:"+msg);
+		return msg + " exchanged";
+	});
+`
+	err := worker.Load("code.js", code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := worker.SendSync("pong")
+	if got, want := response, "pong exchanged"; got != want {
+		t.Errorf("got %q want %q", got, want)
+	}
+}
+
+func TestRequestFromGoReturningNonString(t *testing.T) {
+	worker := New(func(msg string) {
+		println("recv cb", msg)
+	}, DiscardSendSync)
+	code := `
+	$recvSync(function(msg) {
+   		$send("in recvSync:"+msg);
+		return 42;
+	});
+`
+	err := worker.Load("code.js", code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := worker.SendSync("pang")
+	if got, want := response, "err: non-string return value"; got != want {
+		t.Errorf("got %q want %q", got, want)
 	}
 }
