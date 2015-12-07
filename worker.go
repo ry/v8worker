@@ -8,19 +8,27 @@ package v8worker
 */
 import "C"
 import "errors"
+
 import "unsafe"
 import "sync"
 
 // To receive messages from javascript...
 type ReceiveMessageCallback func(msg string)
 
+// To send a message from javascript and synchronously return a string.
+type ReceiveSyncMessageCallback func(msg string) string
+
+// DiscardSendSync can be used in the worker constructor when you don't use the builtin $sendSync.
+func DiscardSendSync(msg string) string { return "" }
+
 // Don't init V8 more than once.
 var initV8Once sync.Once
 
 // This is a golang wrapper around a single V8 Isolate.
 type Worker struct {
-	cWorker *C.worker
-	cb      ReceiveMessageCallback
+	cWorker     *C.worker
+	cb          ReceiveMessageCallback
+	recvSync_cb ReceiveSyncMessageCallback
 }
 
 // Return the V8 version E.G. "4.3.59"
@@ -35,11 +43,20 @@ func recvCb(msg_s *C.char, ptr unsafe.Pointer) {
 	worker.cb(msg)
 }
 
+//export recvSyncCb
+func recvSyncCb(msg_s *C.char, ptr unsafe.Pointer) *C.char {
+	msg := C.GoString(msg_s)
+	worker := (*Worker)(ptr)
+	return_s := C.CString(worker.recvSync_cb(msg))
+	return return_s
+}
+
 // Creates a new worker, which corresponds to a V8 isolate. A single threaded
 // standalone execution context.
-func New(cb ReceiveMessageCallback) *Worker {
+func New(cb ReceiveMessageCallback, recvSync_cb ReceiveSyncMessageCallback) *Worker {
 	worker := &Worker{
-		cb: cb,
+		cb:          cb,
+		recvSync_cb: recvSync_cb,
 	}
 
 	initV8Once.Do(func() {
@@ -47,8 +64,9 @@ func New(cb ReceiveMessageCallback) *Worker {
 	})
 
 	callback := C.worker_recv_cb(C.go_recv_cb)
+	receiveSync_callback := C.worker_recvSync_cb(C.go_recvSync_cb)
 
-	worker.cWorker = C.worker_new(callback, unsafe.Pointer(worker))
+	worker.cWorker = C.worker_new(callback, receiveSync_callback, unsafe.Pointer(worker))
 	return worker
 }
 
@@ -80,4 +98,14 @@ func (w *Worker) Send(msg string) error {
 	}
 
 	return nil
+}
+
+// SendSync sends a message to a worker. The $recvSync callback in js will be called.
+// That callback will return a string which is passed to golang and used as the return value of SendSync.
+func (w *Worker) SendSync(msg string) string {
+	msg_s := C.CString(string(msg))
+	defer C.free(unsafe.Pointer(msg_s))
+
+	svalue := C.worker_sendSync(w.cWorker, msg_s)
+	return C.GoString(svalue)
 }
