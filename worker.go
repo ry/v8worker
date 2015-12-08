@@ -11,6 +11,7 @@ import "errors"
 
 import "unsafe"
 import "sync"
+import "runtime"
 
 // To receive messages from javascript...
 type ReceiveMessageCallback func(msg string)
@@ -67,6 +68,9 @@ func New(cb ReceiveMessageCallback, recvSync_cb ReceiveSyncMessageCallback) *Wor
 	receiveSync_callback := C.worker_recvSync_cb(C.go_recvSync_cb)
 
 	worker.cWorker = C.worker_new(callback, receiveSync_callback, unsafe.Pointer(worker))
+	runtime.SetFinalizer(worker, func(final_worker *Worker) {
+		C.worker_kill(final_worker.cWorker) //Delete this worker on finalize (GC)
+	})
 	return worker
 }
 
