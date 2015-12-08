@@ -26,6 +26,8 @@ const char* worker_last_exception(worker* w);
 int worker_send(worker* w, const char* msg);
 const char* worker_sendSync(worker* w, const char* msg);
 
+void worker_kill(worker* w);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

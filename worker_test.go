@@ -2,6 +2,7 @@ package v8worker
 
 import (
 	"testing"
+	"runtime"
 )
 
 func TestVersion(t *testing.T) {
@@ -144,5 +145,27 @@ func TestRequestFromGoReturningNonString(t *testing.T) {
 	response := worker.SendSync("pang")
 	if got, want := response, "err: non-string return value"; got != want {
 		t.Errorf("got %q want %q", got, want)
+	}
+}
+
+//I have profiled this repeatedly with massive values to ensure
+//memory does indeed get reclaimed and that the finalizer
+// gets called and the C-side of this does clean up memory correctly.
+func TestWorkerDeletion(t *testing.T) {
+	recvCount := 0
+	for i := 1; i <= 100; i++ {
+		worker := New(func(msg string) {
+			println("worker", msg)
+			recvCount++
+		}, DiscardSendSync)
+		err := worker.Load("1.js", `$send("hello1")`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		runtime.GC()
+	}
+
+	if recvCount != 100 {
+		t.Fatal("bad recvCount", recvCount)
 	}
 }
