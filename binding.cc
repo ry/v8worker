@@ -367,4 +367,9 @@ worker* worker_new(worker_recv_cb cb, worker_recvSync_cb recvSync_cb, void* data
   return w;
 }
 
+void worker_dispose(worker* w) {
+  w->isolate->Dispose();
+  delete(w);
+}
+
 }
