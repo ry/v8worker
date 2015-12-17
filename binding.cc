@@ -3,22 +3,28 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <atomic>
 #include "v8.h"
 #include "libplatform/libplatform.h"
 #include "binding.h"
 
 using namespace v8;
 
-struct worker_s {
-  int x;
+struct worker_s {  
   void* data;
-  worker_recv_cb cb;
-  worker_recvSync_cb req_cb;
-  Isolate* isolate;
   std::string last_exception;
-  Persistent<Function> recv;
-  Persistent<Context> context;
-  Persistent<Function> recv_sync_handler;
+  Isolate* isolate;
+  Persistent<Context> context;  
+  std::atomic<int> contextCounter;  
+};
+
+struct context_s {
+	int id;
+	Persistent<Context> context;	
+	worker_recv_cb cb;
+    worker_recvSync_cb req_cb;
+    Persistent<Function> recv;
+    Persistent<Function> recv_sync_handler;
 };
 
 // Extracts a C string from a V8 Utf8Value.
@@ -116,12 +122,12 @@ const char* worker_last_exception(worker* w) {
   return w->last_exception.c_str();
 }
 
-int worker_load(worker* w, char* name_s, char* source_s) {
+int worker_load(worker* w, context *c, char* name_s, char* source_s) {
   Locker locker(w->isolate);
   Isolate::Scope isolate_scope(w->isolate);
   HandleScope handle_scope(w->isolate);
 
-  Local<Context> context = Local<Context>::New(w->isolate, w->context);
+  Local<Context> context = Local<Context>::New(w->isolate, c->context);
   Context::Scope context_scope(context);
 
   TryCatch try_catch;
@@ -139,6 +145,7 @@ int worker_load(worker* w, char* name_s, char* source_s) {
     return 1;
   }
 
+  w->isolate->SetData(1, c);
   Handle<Value> result = script->Run();
 
   if (result.IsEmpty()) {
@@ -171,50 +178,54 @@ void Print(const FunctionCallbackInfo<Value>& args) {
 void Recv(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
   worker* w = (worker*)isolate->GetData(0);
+  context *c = static_cast<context*>(isolate->GetData(1));
   assert(w->isolate == isolate);
 
   HandleScope handle_scope(isolate);
 
-  Local<Context> context = Local<Context>::New(w->isolate, w->context);
+  Local<Context> context = Local<Context>::New(w->isolate, c->context);
   Context::Scope context_scope(context);
 
   Local<Value> v = args[0];
   assert(v->IsFunction());
   Local<Function> func = Local<Function>::Cast(v);
 
-  w->recv.Reset(isolate, func);
+  c->recv.Reset(isolate, func);
 }
 
 void RecvSync(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
   worker* w = (worker*)isolate->GetData(0);
+  context *c = static_cast<context*>(isolate->GetData(1));
   assert(w->isolate == isolate);
 
   HandleScope handle_scope(isolate);
 
-  Local<Context> context = Local<Context>::New(w->isolate, w->context);
+  Local<Context> context = Local<Context>::New(w->isolate, c->context);
   Context::Scope context_scope(context);
 
   Local<Value> v = args[0];
   assert(v->IsFunction());
   Local<Function> func = Local<Function>::Cast(v);
 
-  w->recv_sync_handler.Reset(isolate, func);
+  c->recv_sync_handler.Reset(isolate, func);
 }
 
 // Called from javascript. Must route message to golang.
 void Send(const FunctionCallbackInfo<Value>& args) {
   std::string msg;
   worker* w = NULL;
+  context *c = NULL;
   {
     Isolate* isolate = args.GetIsolate();
     w = static_cast<worker*>(isolate->GetData(0));
+	c = static_cast<context*>(isolate->GetData(1));
     assert(w->isolate == isolate);
 
     Locker locker(w->isolate);
     HandleScope handle_scope(isolate);
 
-    Local<Context> context = Local<Context>::New(w->isolate, w->context);
+    Local<Context> context = Local<Context>::New(w->isolate, c->context);
     Context::Scope context_scope(context);
 
     Local<Value> v = args[0];
@@ -225,7 +236,7 @@ void Send(const FunctionCallbackInfo<Value>& args) {
   }
 
   // XXX should we use Unlocker?
-  w->cb(msg.c_str(), w->data);
+  c->cb(msg.c_str(), c);
 }
 
 // Called from javascript using $request.
@@ -233,15 +244,17 @@ void Send(const FunctionCallbackInfo<Value>& args) {
 void SendSync(const FunctionCallbackInfo<Value>& args) {
   std::string msg;
   worker* w = NULL;
+  context *c = NULL;
   {
     Isolate* isolate = args.GetIsolate();
     w = static_cast<worker*>(isolate->GetData(0));
+	c = static_cast<context*>(isolate->GetData(1));
     assert(w->isolate == isolate);
 
     Locker locker(w->isolate);
     HandleScope handle_scope(isolate);
 
-    Local<Context> context = Local<Context>::New(w->isolate, w->context);
+    Local<Context> context = Local<Context>::New(w->isolate, c->context);
     Context::Scope context_scope(context);
 
     Local<Value> v = args[0];
@@ -250,24 +263,24 @@ void SendSync(const FunctionCallbackInfo<Value>& args) {
     String::Utf8Value str(v);
     msg = ToCString(str);
   }
-  const char* returnMsg = w->req_cb(msg.c_str(), w->data);
+  const char* returnMsg = c->req_cb(msg.c_str(), c);
   Local<String> returnV = String::NewFromUtf8(w->isolate, returnMsg);
   args.GetReturnValue().Set(returnV);
 }
 
 // Called from golang. Must route message to javascript lang.
 // non-zero return value indicates error. check worker_last_exception().
-int worker_send(worker* w, const char* msg) {
+int worker_send(worker* w, context* c, const char* msg) {
   Locker locker(w->isolate);
   Isolate::Scope isolate_scope(w->isolate);
   HandleScope handle_scope(w->isolate);
 
-  Local<Context> context = Local<Context>::New(w->isolate, w->context);
+  Local<Context> context = Local<Context>::New(w->isolate, c->context);
   Context::Scope context_scope(context);
 
   TryCatch try_catch;
 
-  Local<Function> recv = Local<Function>::New(w->isolate, w->recv);
+  Local<Function> recv = Local<Function>::New(w->isolate, c->recv);
   if (recv.IsEmpty()) {
     w->last_exception = "$recv not called";
     return 1;
@@ -278,6 +291,7 @@ int worker_send(worker* w, const char* msg) {
 
   assert(!try_catch.HasCaught());
 
+  w->isolate->SetData(1, c);
   recv->Call(context->Global(), 1, args);
 
   if (try_catch.HasCaught()) {
@@ -290,16 +304,16 @@ int worker_send(worker* w, const char* msg) {
 
 // Called from golang. Must route message to javascript lang.
 // It will call the $recv_sync_handler callback function and return its string value.
-const char* worker_sendSync(worker* w, const char* msg) {
+const char* worker_sendSync(worker* w, context* c, const char* msg) {
   std::string out;
   Locker locker(w->isolate);
   Isolate::Scope isolate_scope(w->isolate);
   HandleScope handle_scope(w->isolate);
 
-  Local<Context> context = Local<Context>::New(w->isolate, w->context);
+  Local<Context> context = Local<Context>::New(w->isolate, c->context);
   Context::Scope context_scope(context);
 
-  Local<Function> recv_sync_handler = Local<Function>::New(w->isolate, w->recv_sync_handler);
+  Local<Function> recv_sync_handler = Local<Function>::New(w->isolate, c->recv_sync_handler);
   if (recv_sync_handler.IsEmpty()) {
     out.append("err: $recvSync not called");
     return out.c_str();
@@ -307,6 +321,8 @@ const char* worker_sendSync(worker* w, const char* msg) {
 
   Local<Value> args[1];
   args[0] = String::NewFromUtf8(w->isolate, msg);
+  
+  w->isolate->SetData(1, c);
   Local<Value> response_value = recv_sync_handler->Call(context->Global(), 1, args);
 
   if (response_value->IsString()) {
@@ -327,21 +343,10 @@ void v8_init() {
   V8::InitializePlatform(platform);
 }
 
-worker* worker_new(worker_recv_cb cb, worker_recvSync_cb recvSync_cb, void* data) {
-  Isolate::CreateParams create_params;
-  create_params.array_buffer_allocator = &array_buffer_allocator;
-  Isolate* isolate = Isolate::New(create_params);
-  Locker locker(isolate);
-  Isolate::Scope isolate_scope(isolate);
-  HandleScope handle_scope(isolate);
-
-  worker* w = new(worker);
-  w->isolate = isolate;
-  w->isolate->SetCaptureStackTraceForUncaughtExceptions(true);
-  w->isolate->SetData(0, w);
-  w->data = data;
-  w->cb = cb;
-  w->req_cb = recvSync_cb;
+context* context_new(worker* w, worker_recv_cb cb, worker_recvSync_cb recvSync_cb) {  
+  Locker locker(w->isolate);
+  Isolate::Scope isolate_scope(w->isolate);
+  HandleScope handle_scope(w->isolate);
 
   Local<ObjectTemplate> global = ObjectTemplate::New(w->isolate);
 
@@ -360,10 +365,34 @@ worker* worker_new(worker_recv_cb cb, worker_recvSync_cb recvSync_cb, void* data
   global->Set(String::NewFromUtf8(w->isolate, "$recvSync"),
               FunctionTemplate::New(w->isolate, RecvSync));
 
-  Local<Context> context = Context::New(w->isolate, NULL, global);
-  w->context.Reset(w->isolate, context);
-  //context->Enter();
+  Local<Context> localContext = Context::New(w->isolate, NULL, global);
+  
+  w->contextCounter++;
+  
+  context* c = new(context);
+  c->id = w->contextCounter.load();
+  c->cb = cb;
+  c->req_cb = recvSync_cb;
+  c->context.Reset(w->isolate, localContext);
+  w->isolate->SetData(c->id, c);
+  
+  return c;
+}
 
+worker* worker_new(void* data) {
+  Isolate::CreateParams create_params;
+  create_params.array_buffer_allocator = &array_buffer_allocator;
+  Isolate* isolate = Isolate::New(create_params);
+  Locker locker(isolate);
+  Isolate::Scope isolate_scope(isolate);
+  HandleScope handle_scope(isolate);
+
+  worker* w = new(worker);
+  w->isolate = isolate;
+  w->isolate->SetCaptureStackTraceForUncaughtExceptions(true);
+  w->isolate->SetData(0, w);
+  w->data = data;
+  
   return w;
 }
 
