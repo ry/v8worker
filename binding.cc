@@ -325,12 +325,12 @@ void v8_init() {
 
   Platform* platform = platform::CreateDefaultPlatform();
   V8::InitializePlatform(platform);
-
-  V8::SetArrayBufferAllocator(&array_buffer_allocator);
 }
 
 worker* worker_new(worker_recv_cb cb, worker_recvSync_cb recvSync_cb, void* data) {
-  Isolate* isolate = Isolate::New();
+  Isolate::CreateParams create_params;
+  create_params.array_buffer_allocator = &array_buffer_allocator;
+  Isolate* isolate = Isolate::New(create_params);
   Locker locker(isolate);
   Isolate::Scope isolate_scope(isolate);
   HandleScope handle_scope(isolate);
