@@ -14,12 +14,10 @@ struct worker_s {
   void* data;
   std::string last_exception;
   Isolate* isolate;
-  Persistent<Context> context;  
-  std::atomic<int> contextCounter;  
+  Persistent<Context> context;
 };
 
 struct context_s {
-	int id;
 	Persistent<Context> context;	
 	worker_recv_cb cb;
     worker_recvSync_cb req_cb;
@@ -367,14 +365,10 @@ context* context_new(worker* w, worker_recv_cb cb, worker_recvSync_cb recvSync_c
 
   Local<Context> localContext = Context::New(w->isolate, NULL, global);
   
-  w->contextCounter++;
-  
   context* c = new(context);
-  c->id = w->contextCounter.load();
   c->cb = cb;
   c->req_cb = recvSync_cb;
   c->context.Reset(w->isolate, localContext);
-  w->isolate->SetData(c->id, c);
   
   return c;
 }
