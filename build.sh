@@ -19,7 +19,7 @@ outdir="`pwd`/v8/out/$target"
 libv8_base="`find $outdir -name 'libv8_base.a' | head -1`"
 libv8_libbase="`find $outdir -name 'libv8_libbase.a' | head -1`"
 libv8_libplatform="`find $outdir -name 'libv8_libplatform.a' | head -1`"
-libv8_snapshot="`find $outdir -name 'libv8_external_snapshot.a' | head -1`"
+libv8_snapshot="`find $outdir -name 'libv8_nosnapshot.a' | head -1`"
 
 # for Linux
 libs=''
