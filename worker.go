@@ -82,6 +82,9 @@ func NewContext(w *Worker, cb ReceiveMessageCallback, recvSync_cb ReceiveSyncMes
 	receiveSync_callback := C.worker_recvSync_cb(C.go_recvSync_cb)
 
 	context.cContext = C.context_new(w.cWorker, callback, receiveSync_callback)	
+	runtime.SetFinalizer(context, func(final_context *Context) {
+		C.context_dispose(final_context.cContext);
+	})
 	return context
 }
 

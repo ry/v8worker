@@ -14,15 +14,14 @@ struct worker_s {
   void* data;
   std::string last_exception;
   Isolate* isolate;
-  Persistent<Context> context;
 };
 
 struct context_s {
-	Persistent<Context> context;	
-	worker_recv_cb cb;
-    worker_recvSync_cb req_cb;
-    Persistent<Function> recv;
-    Persistent<Function> recv_sync_handler;
+  Persistent<Context> context;	
+  worker_recv_cb cb;
+  worker_recvSync_cb req_cb;
+  Persistent<Function> recv;
+  Persistent<Function> recv_sync_handler;
 };
 
 // Extracts a C string from a V8 Utf8Value.
@@ -393,6 +392,11 @@ worker* worker_new(void* data) {
 void worker_dispose(worker* w) {
   w->isolate->Dispose();
   delete(w);
+}
+
+void context_dispose(context* c) {
+  c->context.Reset();
+  delete(c);
 }
 
 }
