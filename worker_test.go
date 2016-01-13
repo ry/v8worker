@@ -1,8 +1,9 @@
 package v8worker
 
 import (
-	"testing"
 	"runtime"
+	"testing"
+	"time"
 )
 
 func TestVersion(t *testing.T) {
@@ -168,4 +169,35 @@ func TestWorkerDeletion(t *testing.T) {
 	if recvCount != 100 {
 		t.Fatal("bad recvCount", recvCount)
 	}
+}
+
+// Test breaking script execution
+func TestWorkerBreaking(t *testing.T) {
+	worker := New(func(msg string) {
+		println("recv cb", msg)
+	}, DiscardSendSync)
+
+	ch := make(chan string)
+
+	go func() {
+		message := <-ch
+		println(message, message != "breaked")
+		if message != "breaked" {
+			t.Fatal(message)
+		}
+	}()
+
+	go func() {
+		time.Sleep(time.Second * 3)
+		ch <- "Script didn't break in 2 seconds"
+	}()
+
+	go func(w *Worker) {
+		time.Sleep(time.Second * 2)
+		w.Break()
+	}(worker)
+
+	worker.Load("fib.js", `function fib(n) { if (n < 2) return n; return fib(n - 2) + fib(n - 1); }; var i = 0; while(true) {var j = fib(35); $print("In sequence " + i + " fib(35) is " + j); i++};`)
+
+	ch <- "breaked"
 }

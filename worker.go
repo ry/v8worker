@@ -74,6 +74,11 @@ func New(cb ReceiveMessageCallback, recvSync_cb ReceiveSyncMessageCallback) *Wor
 	return worker
 }
 
+// Breaks execution of javascript
+func (w *Worker) Break() {
+	C.worker_break(w.cWorker)
+}
+
 // Load and executes a javascript file with the filename specified by
 // scriptName and the contents of the file specified by the param code.
 func (w *Worker) Load(scriptName string, code string) error {

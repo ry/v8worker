@@ -28,6 +28,8 @@ const char* worker_sendSync(worker* w, const char* msg);
 
 void worker_dispose(worker* w);
 
+void worker_break(worker* w);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
