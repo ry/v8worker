@@ -19,6 +19,9 @@ type ReceiveMessageCallback func(msg string)
 // To send a message from javascript and synchronously return a string.
 type ReceiveSyncMessageCallback func(msg string) string
 
+// DiscardSend can be used in the worker constructor when you don't use the builtin $send.
+func DiscardSend(msg string) {}
+
 // DiscardSendSync can be used in the worker constructor when you don't use the builtin $sendSync.
 func DiscardSendSync(msg string) string { return "" }
 
@@ -52,7 +55,7 @@ func recvSyncCb(msg_s *C.char, ptr unsafe.Pointer) *C.char {
 	return return_s
 }
 
-// Creates a new worker, which corresponds to a V8 isolate. A single threaded
+// New creates a new worker, which corresponds to a V8 isolate. A single threaded
 // standalone execution context.
 func New(cb ReceiveMessageCallback, recvSync_cb ReceiveSyncMessageCallback) *Worker {
 	worker := &Worker{
@@ -72,6 +75,16 @@ func New(cb ReceiveMessageCallback, recvSync_cb ReceiveSyncMessageCallback) *Wor
 		C.worker_dispose(final_worker.cWorker) // Delete this worker on finalize (GC)
 	})
 	return worker
+}
+
+// RegisterReceiveCallback registers callback for builtin js $send function
+func (w *Worker) RegisterReceiveCallback(cb ReceiveMessageCallback) {
+	w.cb = cb
+}
+
+// RegisterReceiveSyncCallback registers callback for builtin js $sendSync function
+func (w *Worker) RegisterReceiveSyncCallback(cb ReceiveSyncMessageCallback) {
+	w.recvSync_cb = cb
 }
 
 // Breaks execution of javascript
