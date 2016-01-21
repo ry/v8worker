@@ -94,13 +94,18 @@ func (w *Worker) Break() {
 
 // Load and executes a javascript file with the filename specified by
 // scriptName and the contents of the file specified by the param code.
-func (w *Worker) Load(scriptName string, code string) error {
+func (w *Worker) Load(scriptName string, code string, _offset ...int) error {
 	scriptName_s := C.CString(scriptName)
 	code_s := C.CString(code)
 	defer C.free(unsafe.Pointer(scriptName_s))
 	defer C.free(unsafe.Pointer(code_s))
 
-	r := C.worker_load(w.cWorker, scriptName_s, code_s)
+	var offset int
+	if _offset != nil {
+		offset = _offset[0]
+	}
+	offset_s := C.int(offset)
+	r := C.worker_load(w.cWorker, scriptName_s, code_s, offset_s)
 	if r != 0 {
 		errStr := C.GoString(C.worker_last_exception(w.cWorker))
 		return errors.New(errStr)

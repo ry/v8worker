@@ -116,7 +116,7 @@ const char* worker_last_exception(worker* w) {
   return w->last_exception.c_str();
 }
 
-int worker_load(worker* w, char* name_s, char* source_s) {
+int worker_load(worker* w, char* name_s, char* source_s, int offset_s) {
   Locker locker(w->isolate);
   Isolate::Scope isolate_scope(w->isolate);
   HandleScope handle_scope(w->isolate);
@@ -129,7 +129,9 @@ int worker_load(worker* w, char* name_s, char* source_s) {
   Local<String> name = String::NewFromUtf8(w->isolate, name_s);
   Local<String> source = String::NewFromUtf8(w->isolate, source_s);
 
-  ScriptOrigin origin(name);
+  Local<Integer> offset = Integer::New(w->isolate, offset_s);
+  ScriptOrigin origin(name, offset);
+//   ScriptOrigin origin(name);
 
   Local<Script> script = Script::Compile(source, &origin);
 
