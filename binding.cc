@@ -128,10 +128,8 @@ int worker_load(worker* w, char* name_s, char* source_s, int offset_s) {
 
   Local<String> name = String::NewFromUtf8(w->isolate, name_s);
   Local<String> source = String::NewFromUtf8(w->isolate, source_s);
-
   Local<Integer> offset = Integer::New(w->isolate, offset_s);
   ScriptOrigin origin(name, offset);
-//   ScriptOrigin origin(name);
 
   Local<Script> script = Script::Compile(source, &origin);
 
