@@ -321,16 +321,22 @@ const char* worker_sendSync(worker* w, const char* msg) {
 static ArrayBufferAllocator array_buffer_allocator;
 
 void v8_init() {
-  V8::Initialize();
-
+  // Initialize V8.
+  const char* flags = "--harmony_proxies";
+  V8::SetFlagsFromString(flags, strlen(flags));
+  V8::InitializeICU();
   Platform* platform = platform::CreateDefaultPlatform();
   V8::InitializePlatform(platform);
-
-  V8::SetArrayBufferAllocator(&array_buffer_allocator);
+  V8::Initialize();
 }
 
 worker* worker_new(worker_recv_cb cb, worker_recvSync_cb recvSync_cb, void* data) {
-  Isolate* isolate = Isolate::New();
+  // Create a new Isolate and make it the current one.
+  ArrayBufferAllocator allocator;
+  Isolate::CreateParams create_params;
+  create_params.array_buffer_allocator = &allocator;
+  Isolate* isolate = Isolate::New(create_params);
+
   Locker locker(isolate);
   Isolate::Scope isolate_scope(isolate);
   HandleScope handle_scope(isolate);
