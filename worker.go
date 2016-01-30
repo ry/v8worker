@@ -77,16 +77,6 @@ func New(cb ReceiveMessageCallback, recvSync_cb ReceiveSyncMessageCallback) *Wor
 	return worker
 }
 
-// RegisterReceiveCallback registers callback for builtin js $send function
-func (w *Worker) RegisterReceiveCallback(cb ReceiveMessageCallback) {
-	w.cb = cb
-}
-
-// RegisterReceiveSyncCallback registers callback for builtin js $sendSync function
-func (w *Worker) RegisterReceiveSyncCallback(cb ReceiveSyncMessageCallback) {
-	w.recvSync_cb = cb
-}
-
 // Breaks execution of javascript
 func (w *Worker) Break() {
 	C.worker_break(w.cWorker)
