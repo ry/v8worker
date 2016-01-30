@@ -116,7 +116,7 @@ const char* worker_last_exception(worker* w) {
   return w->last_exception.c_str();
 }
 
-int worker_load(worker* w, char* name_s, char* source_s) {
+int worker_load(worker* w, char* name_s, char* source_s, int offset_s) {
   Locker locker(w->isolate);
   Isolate::Scope isolate_scope(w->isolate);
   HandleScope handle_scope(w->isolate);
@@ -128,8 +128,8 @@ int worker_load(worker* w, char* name_s, char* source_s) {
 
   Local<String> name = String::NewFromUtf8(w->isolate, name_s);
   Local<String> source = String::NewFromUtf8(w->isolate, source_s);
-
-  ScriptOrigin origin(name);
+  Local<Integer> offset = Integer::New(w->isolate, offset_s);
+  ScriptOrigin origin(name, offset);
 
   Local<Script> script = Script::Compile(source, &origin);
 
@@ -321,16 +321,22 @@ const char* worker_sendSync(worker* w, const char* msg) {
 static ArrayBufferAllocator array_buffer_allocator;
 
 void v8_init() {
-  V8::Initialize();
-
+  // Initialize V8.
+  const char* flags = "--harmony_proxies";
+  V8::SetFlagsFromString(flags, strlen(flags));
+  V8::InitializeICU();
   Platform* platform = platform::CreateDefaultPlatform();
   V8::InitializePlatform(platform);
-
-  V8::SetArrayBufferAllocator(&array_buffer_allocator);
+  V8::Initialize();
 }
 
 worker* worker_new(worker_recv_cb cb, worker_recvSync_cb recvSync_cb, void* data) {
-  Isolate* isolate = Isolate::New();
+  // Create a new Isolate and make it the current one.
+  ArrayBufferAllocator allocator;
+  Isolate::CreateParams create_params;
+  create_params.array_buffer_allocator = &allocator;
+  Isolate* isolate = Isolate::New(create_params);
+
   Locker locker(isolate);
   Isolate::Scope isolate_scope(isolate);
   HandleScope handle_scope(isolate);
@@ -370,6 +376,10 @@ worker* worker_new(worker_recv_cb cb, worker_recvSync_cb recvSync_cb, void* data
 void worker_dispose(worker* w) {
   w->isolate->Dispose();
   delete(w);
+}
+
+void worker_break(worker* w) {
+  V8::TerminateExecution(w->isolate);
 }
 
 }

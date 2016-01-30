@@ -19,6 +19,9 @@ type ReceiveMessageCallback func(msg string)
 // To send a message from javascript and synchronously return a string.
 type ReceiveSyncMessageCallback func(msg string) string
 
+// DiscardSend can be used in the worker constructor when you don't use the builtin $send.
+func DiscardSend(msg string) {}
+
 // DiscardSendSync can be used in the worker constructor when you don't use the builtin $sendSync.
 func DiscardSendSync(msg string) string { return "" }
 
@@ -52,7 +55,7 @@ func recvSyncCb(msg_s *C.char, ptr unsafe.Pointer) *C.char {
 	return return_s
 }
 
-// Creates a new worker, which corresponds to a V8 isolate. A single threaded
+// New creates a new worker, which corresponds to a V8 isolate. A single threaded
 // standalone execution context.
 func New(cb ReceiveMessageCallback, recvSync_cb ReceiveSyncMessageCallback) *Worker {
 	worker := &Worker{
@@ -74,15 +77,25 @@ func New(cb ReceiveMessageCallback, recvSync_cb ReceiveSyncMessageCallback) *Wor
 	return worker
 }
 
+// Breaks execution of javascript
+func (w *Worker) Break() {
+	C.worker_break(w.cWorker)
+}
+
 // Load and executes a javascript file with the filename specified by
 // scriptName and the contents of the file specified by the param code.
-func (w *Worker) Load(scriptName string, code string) error {
+func (w *Worker) Load(scriptName string, code string, _offset ...int) error {
 	scriptName_s := C.CString(scriptName)
 	code_s := C.CString(code)
 	defer C.free(unsafe.Pointer(scriptName_s))
 	defer C.free(unsafe.Pointer(code_s))
 
-	r := C.worker_load(w.cWorker, scriptName_s, code_s)
+	var offset int
+	if _offset != nil {
+		offset = _offset[0]
+	}
+	offset_s := C.int(offset)
+	r := C.worker_load(w.cWorker, scriptName_s, code_s, offset_s)
 	if r != 0 {
 		errStr := C.GoString(C.worker_last_exception(w.cWorker))
 		return errors.New(errStr)
