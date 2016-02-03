@@ -27,6 +27,7 @@ int worker_send(worker* w, const char* msg);
 const char* worker_send_sync(worker* w, const char* msg);
 
 void worker_dispose(worker* w);
+void worker_terminate_execution(worker* w);
 
 #ifdef __cplusplus
 } // extern "C"

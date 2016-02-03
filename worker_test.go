@@ -3,6 +3,7 @@ package v8worker
 import (
 	"runtime"
 	"testing"
+	"time"
 )
 
 func TestVersion(t *testing.T) {
@@ -170,4 +171,18 @@ func TestWorkerDeletion(t *testing.T) {
 	if recvCount != 100 {
 		t.Fatal("bad recvCount", recvCount)
 	}
+}
+
+// Test breaking script execution
+func TestWorkerBreaking(t *testing.T) {
+	worker := New(func(msg string) {
+		println("recv cb", msg)
+	}, DiscardSendSync)
+
+	go func(w *Worker) {
+		time.Sleep(time.Second)
+		w.TerminateExecution()
+	}(worker)
+
+	worker.Load("forever.js", ` while (true) { ; } `)
 }

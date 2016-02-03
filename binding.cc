@@ -372,4 +372,8 @@ void worker_dispose(worker* w) {
   delete(w);
 }
 
+void worker_terminate_execution(worker* w) {
+  V8::TerminateExecution(w->isolate);
+}
+
 }

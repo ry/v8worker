@@ -137,3 +137,8 @@ func (w *Worker) SendSync(msg string) string {
 	svalue := C.worker_send_sync(w.cWorker, msg_s)
 	return C.GoString(svalue)
 }
+
+// Terminates execution of javascript
+func (w *Worker) TerminateExecution() {
+	C.worker_terminate_execution(w.cWorker)
+}
