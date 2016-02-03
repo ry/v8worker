@@ -11,7 +11,7 @@ using namespace v8;
 
 struct worker_s {
   int x;
-  void* data;
+  int table_index;
   worker_recv_cb cb;
   worker_recv_sync_cb sync_cb;
   Isolate* isolate;
@@ -100,12 +100,12 @@ std::string ExceptionString(Isolate* isolate, TryCatch* try_catch) {
 extern "C" {
 #include "_cgo_export.h"
 
-void go_recv_cb(const char* msg, void* data) {
-  recvCb((char*)msg, data);
+void go_recv_cb(const char* msg, int table_index) {
+  recvCb((char*)msg, table_index);
 }
 
-const char* go_recv_sync_cb(const char* msg, void* data) {
-  return recvSyncCb((char*)msg, data);
+const char* go_recv_sync_cb(const char* msg, int table_index) {
+  return recvSyncCb((char*)msg, table_index);
 }
 
 const char* worker_version() {
@@ -225,7 +225,7 @@ void Send(const FunctionCallbackInfo<Value>& args) {
   }
 
   // XXX should we use Unlocker?
-  w->cb(msg.c_str(), w->data);
+  w->cb(msg.c_str(), w->table_index);
 }
 
 // Called from javascript using $request.
@@ -250,7 +250,7 @@ void SendSync(const FunctionCallbackInfo<Value>& args) {
     String::Utf8Value str(v);
     msg = ToCString(str);
   }
-  const char* returnMsg = w->sync_cb(msg.c_str(), w->data);
+  const char* returnMsg = w->sync_cb(msg.c_str(), w->table_index);
   Local<String> returnV = String::NewFromUtf8(w->isolate, returnMsg);
   args.GetReturnValue().Set(returnV);
 }
@@ -329,7 +329,7 @@ void v8_init() {
   V8::SetArrayBufferAllocator(&array_buffer_allocator);
 }
 
-worker* worker_new(worker_recv_cb cb, worker_recv_sync_cb sync_cb, void* data) {
+worker* worker_new(worker_recv_cb cb, worker_recv_sync_cb sync_cb, int table_index) {
   Isolate* isolate = Isolate::New();
   Locker locker(isolate);
   Isolate::Scope isolate_scope(isolate);
@@ -339,7 +339,7 @@ worker* worker_new(worker_recv_cb cb, worker_recv_sync_cb sync_cb, void* data) {
   w->isolate = isolate;
   w->isolate->SetCaptureStackTraceForUncaughtExceptions(true);
   w->isolate->SetData(0, w);
-  w->data = data;
+  w->table_index = table_index;
   w->cb = cb;
   w->sync_cb = sync_cb;
 

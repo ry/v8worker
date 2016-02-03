@@ -3,19 +3,19 @@ extern "C" {
 #endif
 
 
-void go_recv_cb(const char* msg, void* data);
-const char* go_recv_sync_cb(const char* msg, void* data);
+void go_recv_cb(const char* msg, int table_index);
+const char* go_recv_sync_cb(const char* msg, int table_index);
 
 struct worker_s;
 typedef struct worker_s worker;
-typedef void (*worker_recv_cb)(const char* msg, void* data);
-typedef const char* (*worker_recv_sync_cb)(const char* msg, void* data);
+typedef void (*worker_recv_cb)(const char* msg, int table_index);
+typedef const char* (*worker_recv_sync_cb)(const char* msg, int table_index);
 
 const char* worker_version();
 
 void v8_init();
 
-worker* worker_new(worker_recv_cb cb, worker_recv_sync_cb sync_cb, void* data);
+worker* worker_new(worker_recv_cb cb, worker_recv_sync_cb sync_cb, int table_index);
 
 // returns nonzero on error
 // get error from worker_last_exception
