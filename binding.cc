@@ -13,7 +13,7 @@ struct worker_s {
   int x;
   void* data;
   worker_recv_cb cb;
-  worker_recvSync_cb req_cb;
+  worker_recv_sync_cb sync_cb;
   Isolate* isolate;
   std::string last_exception;
   Persistent<Function> recv;
@@ -104,7 +104,7 @@ void go_recv_cb(const char* msg, void* data) {
   recvCb((char*)msg, data);
 }
 
-const char* go_recvSync_cb(const char* msg, void* data) {
+const char* go_recv_sync_cb(const char* msg, void* data) {
   return recvSyncCb((char*)msg, data);
 }
 
@@ -250,7 +250,7 @@ void SendSync(const FunctionCallbackInfo<Value>& args) {
     String::Utf8Value str(v);
     msg = ToCString(str);
   }
-  const char* returnMsg = w->req_cb(msg.c_str(), w->data);
+  const char* returnMsg = w->sync_cb(msg.c_str(), w->data);
   Local<String> returnV = String::NewFromUtf8(w->isolate, returnMsg);
   args.GetReturnValue().Set(returnV);
 }
@@ -290,7 +290,7 @@ int worker_send(worker* w, const char* msg) {
 
 // Called from golang. Must route message to javascript lang.
 // It will call the $recv_sync_handler callback function and return its string value.
-const char* worker_sendSync(worker* w, const char* msg) {
+const char* worker_send_sync(worker* w, const char* msg) {
   std::string out;
   Locker locker(w->isolate);
   Isolate::Scope isolate_scope(w->isolate);
@@ -329,7 +329,7 @@ void v8_init() {
   V8::SetArrayBufferAllocator(&array_buffer_allocator);
 }
 
-worker* worker_new(worker_recv_cb cb, worker_recvSync_cb recvSync_cb, void* data) {
+worker* worker_new(worker_recv_cb cb, worker_recv_sync_cb sync_cb, void* data) {
   Isolate* isolate = Isolate::New();
   Locker locker(isolate);
   Isolate::Scope isolate_scope(isolate);
@@ -341,7 +341,7 @@ worker* worker_new(worker_recv_cb cb, worker_recvSync_cb recvSync_cb, void* data
   w->isolate->SetData(0, w);
   w->data = data;
   w->cb = cb;
-  w->req_cb = recvSync_cb;
+  w->sync_cb = sync_cb;
 
   Local<ObjectTemplate> global = ObjectTemplate::New(w->isolate);
 
