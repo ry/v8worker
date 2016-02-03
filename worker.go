@@ -30,9 +30,6 @@ type ReceiveMessageCallback func(msg string)
 // To send a message from javascript and synchronously return a string.
 type ReceiveSyncMessageCallback func(msg string) string
 
-// DiscardSendSync can be used in the worker constructor when you don't use the builtin $sendSync.
-func DiscardSendSync(msg string) string { return "" }
-
 // Don't init V8 more than once.
 var initV8Once sync.Once
 

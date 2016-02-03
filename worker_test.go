@@ -1,13 +1,15 @@
 package v8worker
 
 import (
-	"testing"
 	"runtime"
+	"testing"
 )
 
 func TestVersion(t *testing.T) {
 	println(Version())
 }
+
+func DiscardSendSync(msg string) string { return "" }
 
 func TestBasic(t *testing.T) {
 	recvCount := 0
