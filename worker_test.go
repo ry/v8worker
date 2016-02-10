@@ -34,6 +34,12 @@ func TestBasic(t *testing.T) {
 		t.Fatal("Expected error")
 	}
 	//println(err.Error())
+    
+    codeWithArrayBufferAllocator := ` var _utf8len = new Uint8Array(256); $print(_utf8len); `
+	err = worker.Load("buffer.js", codeWithArrayBufferAllocator)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	codeWithRecv := `
 		$recv(function(msg) {

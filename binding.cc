@@ -9,23 +9,6 @@
 
 using namespace v8;
 
-struct worker_s {
-  int x;
-  int table_index;
-  worker_recv_cb cb;
-  worker_recv_sync_cb sync_cb;
-  Isolate* isolate;
-  std::string last_exception;
-  Persistent<Function> recv;
-  Persistent<Context> context;
-  Persistent<Function> recv_sync_handler;
-};
-
-// Extracts a C string from a V8 Utf8Value.
-const char* ToCString(const String::Utf8Value& value) {
-  return *value ? *value : "<string conversion failed>";
-}
-
 class ArrayBufferAllocator : public ArrayBuffer::Allocator {
  public:
   virtual void* Allocate(size_t length) {
@@ -36,6 +19,23 @@ class ArrayBufferAllocator : public ArrayBuffer::Allocator {
   virtual void Free(void* data, size_t) { free(data); }
 };
 
+struct worker_s {
+  int x;
+  int table_index;
+  worker_recv_cb cb;
+  worker_recv_sync_cb sync_cb;
+  Isolate* isolate;
+  ArrayBufferAllocator allocator;
+  std::string last_exception;
+  Persistent<Function> recv;
+  Persistent<Context> context;
+  Persistent<Function> recv_sync_handler;
+};
+
+// Extracts a C string from a V8 Utf8Value.
+const char* ToCString(const String::Utf8Value& value) {
+  return *value ? *value : "<string conversion failed>";
+}
 
 // Exception details will be appended to the first argument.
 std::string ExceptionString(Isolate* isolate, TryCatch* try_catch) {
@@ -321,21 +321,22 @@ const char* worker_send_sync(worker* w, const char* msg) {
 static ArrayBufferAllocator array_buffer_allocator;
 
 void v8_init() {
-  V8::Initialize();
-
+  V8::InitializeICU();
   Platform* platform = platform::CreateDefaultPlatform();
   V8::InitializePlatform(platform);
-
-  V8::SetArrayBufferAllocator(&array_buffer_allocator);
+  V8::Initialize();
 }
 
 worker* worker_new(worker_recv_cb cb, worker_recv_sync_cb sync_cb, int table_index) {
-  Isolate* isolate = Isolate::New();
+  worker* w = new(worker);
+  
+  Isolate::CreateParams create_params;
+  create_params.array_buffer_allocator = &w->allocator;
+  Isolate* isolate = Isolate::New(create_params);
   Locker locker(isolate);
   Isolate::Scope isolate_scope(isolate);
   HandleScope handle_scope(isolate);
-
-  worker* w = new(worker);
+ 
   w->isolate = isolate;
   w->isolate->SetCaptureStackTraceForUncaughtExceptions(true);
   w->isolate->SetData(0, w);
