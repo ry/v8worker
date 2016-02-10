@@ -61,6 +61,15 @@ func TestBasic(t *testing.T) {
 	}
 }
 
+func TestUnit8Array(t *testing.T) {
+	worker := New(func(msg string) {}, DiscardSendSync)
+	codeWithArrayBufferAllocator := ` var _utf8len = new Uint8Array(256); $print(_utf8len); `
+	err := worker.Load("buffer.js", codeWithArrayBufferAllocator)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMultipleWorkers(t *testing.T) {
 	recvCount := 0
 	worker1 := New(func(msg string) {

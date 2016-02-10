@@ -12,7 +12,7 @@ set -e -x
 cd `dirname "${BASH_SOURCE[0]}"`
 
 # build v8
-make -C v8/ i18nsupport=off $target
+GYPFLAGS="-Dv8_use_external_startup_data=0" make -C v8/ i18nsupport=off $target
 
 outdir="`pwd`/v8/out/$target"
 
