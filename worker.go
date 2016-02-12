@@ -6,8 +6,8 @@ package v8worker
 #include <stdlib.h>
 #include "binding.h"
 */
+import "C"
 import (
-	"C"
 	"errors"
 	"runtime"
 	"sync"
