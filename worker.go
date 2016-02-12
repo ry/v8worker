@@ -6,12 +6,13 @@ package v8worker
 #include <stdlib.h>
 #include "binding.h"
 */
-import "C"
-import "errors"
-
-import "unsafe"
-import "sync"
-import "runtime"
+import (
+	"C"
+	"errors"
+	"runtime"
+	"sync"
+	"unsafe"
+)
 
 type workerTableIndex int
 
