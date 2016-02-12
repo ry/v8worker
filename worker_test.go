@@ -195,3 +195,57 @@ func TestWorkerBreaking(t *testing.T) {
 
 	worker.Load("forever.js", ` while (true) { ; } `)
 }
+
+func TestWithOptions(t *testing.T) {
+	worker := New(func(msg string) {
+		println("recv cb", msg)
+	}, DiscardSendSync)
+	origin := &ScriptOrigin{
+		ScriptName: "options.js",
+	}
+	expected := `options.js:1
+throw new Error("Error")
+^
+Error: Error
+    at options.js:1:7
+`
+	err := worker.LoadWithOptions(origin, `throw new Error("Error")`)
+	if err.Error() != expected {
+		t.Fatal("Bad stack trace", err.Error())
+	}
+	origin = &ScriptOrigin{
+		ScriptName:   "options.js",
+		LineOffset:   3,
+		ColumnOffset: 2,
+	}
+	expected = `options.js:4
+throw new Error("Error")
+  ^
+Error: Error
+    at options.js:4:9
+`
+	err = worker.LoadWithOptions(origin, `throw new Error("Error")`)
+	if err.Error() != expected {
+		t.Fatal("Bad stack trace", err.Error())
+	}
+	expected = `VM0:1
+throw new Error("Error")
+^
+Error: Error
+    at VM0:1:7
+`
+	err = worker.LoadWithOptions(nil, `throw new Error("Error")`)
+	if err.Error() != expected {
+		t.Fatal("Bad stack trace", err.Error())
+	}
+	expected = `VM1:1
+throw new Error("Error")
+^
+Error: Error
+    at VM1:1:7
+`
+	err = worker.LoadWithOptions(nil, `throw new Error("Error")`)
+	if err.Error() != expected {
+		t.Fatal("Bad stack trace", err.Error())
+	}
+}
