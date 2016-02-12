@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include <string>
 #include "v8.h"
 #include "libplatform/libplatform.h"
@@ -116,7 +117,7 @@ const char* worker_last_exception(worker* w) {
   return w->last_exception.c_str();
 }
 
-int worker_load(worker* w, char* name_s, char* source_s) {
+int worker_load(worker* w, char* source_s, char* name_s, int line_offset_s, int column_offset_s, bool is_shared_cross_origin_s, int script_id_s, bool is_embedder_debug_script_s, char* source_map_url_s, bool is_opaque_s) {
   Locker locker(w->isolate);
   Isolate::Scope isolate_scope(w->isolate);
   HandleScope handle_scope(w->isolate);
@@ -128,8 +129,15 @@ int worker_load(worker* w, char* name_s, char* source_s) {
 
   Local<String> name = String::NewFromUtf8(w->isolate, name_s);
   Local<String> source = String::NewFromUtf8(w->isolate, source_s);
+  Local<Integer> line_offset = Integer::New(w->isolate, line_offset_s);
+  Local<Integer> column_offset = Integer::New(w->isolate, column_offset_s);
+  Local<Boolean> is_shared_cross_origin = Boolean::New(w->isolate, is_shared_cross_origin_s);
+  Local<Integer> script_id = Integer::New(w->isolate, script_id_s);
+  Local<Boolean> is_embedder_debug_script = Boolean::New(w->isolate, is_embedder_debug_script_s);
+  Local<String> source_map_url = String::NewFromUtf8(w->isolate, source_map_url_s);
+  Local<Boolean> is_opaque = Boolean::New(w->isolate, is_opaque_s);
 
-  ScriptOrigin origin(name);
+  ScriptOrigin origin(name, line_offset, column_offset, is_shared_cross_origin, script_id, is_embedder_debug_script, source_map_url, is_opaque);
 
   Local<Script> script = Script::Compile(source, &origin);
 

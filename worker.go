@@ -41,6 +41,17 @@ type Worker struct {
 	tableIndex workerTableIndex
 }
 
+type ScriptOrigin struct {
+	ScriptName            string
+	LineOffset            int32
+	ColumnOffset          int32
+	IsSharedCrossOrigin   bool
+	ScriptId              int32
+	IsEmbedderDebugScript bool
+	SourceMapURL          string
+	IsOpaque              bool
+}
+
 // Return the V8 version E.G. "4.3.59"
 func Version() string {
 	return C.GoString(C.worker_version())
@@ -101,12 +112,29 @@ func New(cb ReceiveMessageCallback, sync_cb ReceiveSyncMessageCallback) *Worker 
 // Load and executes a javascript file with the filename specified by
 // scriptName and the contents of the file specified by the param code.
 func (w *Worker) Load(scriptName string, code string) error {
-	scriptName_s := C.CString(scriptName)
-	code_s := C.CString(code)
-	defer C.free(unsafe.Pointer(scriptName_s))
-	defer C.free(unsafe.Pointer(code_s))
+	return w.LoadWithOptions(&ScriptOrigin{scriptName, 0, 0, false, 0, false, "", false}, code)
+}
 
-	r := C.worker_load(w.cWorker, scriptName_s, code_s)
+// LoadWithOptions loads and executes a javascript file with the ScriptOrigin specified by
+// origin and the contents of the file specified by the param code.
+// ScriptOrigin represents V8 class – see http://v8.paulfryzel.com/docs/master/classv8_1_1_script_origin.html
+func (w *Worker) LoadWithOptions(origin *ScriptOrigin, code string) error {
+	cCode := C.CString(code)
+
+	cScriptName := C.CString(origin.ScriptName)
+	cLineOffset := C.int(origin.LineOffset)
+	cColumnOffset := C.int(origin.ColumnOffset)
+	cIsSharedCrossOrigin := C.bool(origin.IsSharedCrossOrigin)
+	cScriptId := C.int(origin.ScriptId)
+	cIsEmbedderDebugScript := C.bool(origin.IsEmbedderDebugScript)
+	cSourceMapURL := C.CString(origin.SourceMapURL)
+	cIsOpaque := C.bool(origin.IsOpaque)
+
+	defer C.free(unsafe.Pointer(cScriptName))
+	defer C.free(unsafe.Pointer(cCode))
+	defer C.free(unsafe.Pointer(cSourceMapURL))
+
+	r := C.worker_load(w.cWorker, cCode, cScriptName, cLineOffset, cColumnOffset, cIsSharedCrossOrigin, cScriptId, cIsEmbedderDebugScript, cSourceMapURL, cIsOpaque)
 	if r != 0 {
 		errStr := C.GoString(C.worker_last_exception(w.cWorker))
 		return errors.New(errStr)
