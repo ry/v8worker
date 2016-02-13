@@ -34,6 +34,8 @@ type ReceiveSyncMessageCallback func(msg string) string
 // This is a golang wrapper around a single V8 Isolate.
 type Worker struct {
 	cWorker *C.worker
+	cb      ReceiveMessageCallback
+	syncCB  ReceiveSyncMessageCallback
 }
 
 // ScriptOrigin represents V8 class – see http://v8.paulfryzel.com/docs/master/classv8_1_1_script_origin.html
@@ -69,14 +71,17 @@ func recvSyncCb(msg_s *C.char, ptr unsafe.Pointer) *C.char {
 
 // New creates a new worker, which corresponds to a V8 isolate. A single threaded
 // standalone execution context.
-func New(cb ReceiveMessageCallback, sync_cb ReceiveSyncMessageCallback) *Worker {
-	worker := &Worker{}
+func New(cb ReceiveMessageCallback, syncCB ReceiveSyncMessageCallback) *Worker {
+	worker := &Worker{
+		cb:     cb,
+		syncCB: syncCB,
+	}
 
 	initV8Once.Do(func() {
 		C.v8_init()
 	})
 
-	worker.cWorker = C.worker_new(unsafe.Pointer(&cb), unsafe.Pointer(&sync_cb))
+	worker.cWorker = C.worker_new(unsafe.Pointer(&worker.cb), unsafe.Pointer(&worker.syncCB))
 	runtime.SetFinalizer(worker, func(final_worker *Worker) {
 		C.worker_dispose(final_worker.cWorker)
 	})
