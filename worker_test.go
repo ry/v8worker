@@ -197,7 +197,7 @@ func TestWorkerBreaking(t *testing.T) {
 	worker.Load("forever.js", ` while (true) { ; } `)
 }
 
-func TestWithOptions(t *testing.T) {
+func TestLoadWithOptions(t *testing.T) {
 	worker := New(func(msg string) {
 		println("recv cb", msg)
 	}, DiscardSendSync)
