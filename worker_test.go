@@ -2,6 +2,7 @@ package v8worker
 
 import (
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -203,14 +204,9 @@ func TestWithOptions(t *testing.T) {
 	origin := &ScriptOrigin{
 		ScriptName: "options.js",
 	}
-	expected := `options.js:1
-throw new Error("Error")
-^
-Error: Error
-    at options.js:1:7
-`
+	expected := `options.js:1:7`
 	err := worker.LoadWithOptions(origin, `throw new Error("Error")`)
-	if err.Error() != expected {
+	if !strings.Contains(err.Error(), expected) {
 		t.Fatal("Bad stack trace", err.Error())
 	}
 	origin = &ScriptOrigin{
@@ -218,34 +214,19 @@ Error: Error
 		LineOffset:   3,
 		ColumnOffset: 2,
 	}
-	expected = `options.js:4
-throw new Error("Error")
-  ^
-Error: Error
-    at options.js:4:9
-`
+	expected = `options.js:4:9`
 	err = worker.LoadWithOptions(origin, `throw new Error("Error")`)
-	if err.Error() != expected {
+	if !strings.Contains(err.Error(), expected) {
 		t.Fatal("Bad stack trace", err.Error())
 	}
-	expected = `VM0:1
-throw new Error("Error")
-^
-Error: Error
-    at VM0:1:7
-`
+	expected = `VM0:1:7`
 	err = worker.LoadWithOptions(nil, `throw new Error("Error")`)
-	if err.Error() != expected {
+	if !strings.Contains(err.Error(), expected) {
 		t.Fatal("Bad stack trace", err.Error())
 	}
-	expected = `VM1:1
-throw new Error("Error")
-^
-Error: Error
-    at VM1:1:7
-`
+	expected = `VM1:1:7`
 	err = worker.LoadWithOptions(nil, `throw new Error("Error")`)
-	if err.Error() != expected {
+	if !strings.Contains(err.Error(), expected) {
 		t.Fatal("Bad stack trace", err.Error())
 	}
 }
