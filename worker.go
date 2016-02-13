@@ -16,17 +16,8 @@ import (
 )
 
 var (
-	// This table will store all pointers to all active workers. Because we can't safely
-	// pass pointers to Go objects to C, we instead pass a key to this table.
-	workerTable = make(map[workerTableIndex]*Worker)
-
-	// Keeps track of the last used table index. Incremeneted when a worker is created.
-	workerTableNextAvailable workerTableIndex = 0
-
 	// Don't init V8 more than once.
 	initV8Once sync.Once
-
-	workerTableLock sync.Mutex
 
 	scriptSequence       int = 0
 	scriptSequenceLocker sync.Mutex
@@ -42,10 +33,7 @@ type ReceiveSyncMessageCallback func(msg string) string
 
 // This is a golang wrapper around a single V8 Isolate.
 type Worker struct {
-	cWorker    *C.worker
-	cb         ReceiveMessageCallback
-	sync_cb    ReceiveSyncMessageCallback
-	tableIndex workerTableIndex
+	cWorker *C.worker
 }
 
 // ScriptOrigin represents V8 class – see http://v8.paulfryzel.com/docs/master/classv8_1_1_script_origin.html
@@ -65,53 +53,31 @@ func Version() string {
 	return C.GoString(C.worker_version())
 }
 
-func workerTableLookup(index workerTableIndex) *Worker {
-	workerTableLock.Lock()
-	defer workerTableLock.Unlock()
-	return workerTable[index]
-}
-
 //export recvCb
-func recvCb(msg_s *C.char, index workerTableIndex) {
+func recvCb(msg_s *C.char, ptr unsafe.Pointer) {
 	msg := C.GoString(msg_s)
-	worker := workerTableLookup(index)
-	worker.cb(msg)
+	f := *(*ReceiveMessageCallback)(ptr)
+	f(msg)
 }
 
 //export recvSyncCb
-func recvSyncCb(msg_s *C.char, index workerTableIndex) *C.char {
+func recvSyncCb(msg_s *C.char, ptr unsafe.Pointer) *C.char {
 	msg := C.GoString(msg_s)
-	worker := workerTableLookup(index)
-	return_s := C.CString(worker.sync_cb(msg))
-	return return_s
+	f := *(*ReceiveSyncMessageCallback)(ptr)
+	return C.CString(f(msg))
 }
 
 // New creates a new worker, which corresponds to a V8 isolate. A single threaded
 // standalone execution context.
 func New(cb ReceiveMessageCallback, sync_cb ReceiveSyncMessageCallback) *Worker {
-	workerTableLock.Lock()
-	worker := &Worker{
-		cb:         cb,
-		sync_cb:    sync_cb,
-		tableIndex: workerTableNextAvailable,
-	}
-
-	workerTableNextAvailable++
-	workerTable[worker.tableIndex] = worker
-	workerTableLock.Unlock()
+	worker := &Worker{}
 
 	initV8Once.Do(func() {
 		C.v8_init()
 	})
 
-	callback := C.worker_recv_cb(C.go_recv_cb)
-	receiveSync_callback := C.worker_recv_sync_cb(C.go_recv_sync_cb)
-
-	worker.cWorker = C.worker_new(callback, receiveSync_callback, C.int(worker.tableIndex))
+	worker.cWorker = C.worker_new(unsafe.Pointer(&cb), unsafe.Pointer(&sync_cb))
 	runtime.SetFinalizer(worker, func(final_worker *Worker) {
-		workerTableLock.Lock()
-		delete(workerTable, final_worker.tableIndex)
-		workerTableLock.Unlock()
 		C.worker_dispose(final_worker.cWorker)
 	})
 	return worker

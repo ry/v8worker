@@ -4,19 +4,14 @@ extern "C" {
 
 #include <stdbool.h>
 
-void go_recv_cb(const char* msg, int table_index);
-const char* go_recv_sync_cb(const char* msg, int table_index);
-
 struct worker_s;
 typedef struct worker_s worker;
-typedef void (*worker_recv_cb)(const char* msg, int table_index);
-typedef const char* (*worker_recv_sync_cb)(const char* msg, int table_index);
 
 const char* worker_version();
 
 void v8_init();
 
-worker* worker_new(worker_recv_cb cb, worker_recv_sync_cb sync_cb, int table_index);
+worker* worker_new(void* cb, void* sync_cb);
 
 // returns nonzero on error
 // get error from worker_last_exception

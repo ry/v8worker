@@ -21,16 +21,14 @@ class ArrayBufferAllocator : public ArrayBuffer::Allocator {
 };
 
 struct worker_s {
-  int x;
-  int table_index;
-  worker_recv_cb cb;
-  worker_recv_sync_cb sync_cb;
   Isolate* isolate;
   ArrayBufferAllocator allocator;
   std::string last_exception;
   Persistent<Function> recv;
   Persistent<Context> context;
   Persistent<Function> recv_sync_handler;
+  void* cb;
+  void* sync_cb;
 };
 
 // Extracts a C string from a V8 Utf8Value.
@@ -100,14 +98,6 @@ std::string ExceptionString(Isolate* isolate, TryCatch* try_catch) {
 
 extern "C" {
 #include "_cgo_export.h"
-
-void go_recv_cb(const char* msg, int table_index) {
-  recvCb((char*)msg, table_index);
-}
-
-const char* go_recv_sync_cb(const char* msg, int table_index) {
-  return recvSyncCb((char*)msg, table_index);
-}
 
 const char* worker_version() {
   return V8::GetVersion();
@@ -233,7 +223,7 @@ void Send(const FunctionCallbackInfo<Value>& args) {
   }
 
   // XXX should we use Unlocker?
-  w->cb(msg.c_str(), w->table_index);
+  recvCb((char*)msg.c_str(), w->cb);
 }
 
 // Called from javascript using $request.
@@ -258,7 +248,7 @@ void SendSync(const FunctionCallbackInfo<Value>& args) {
     String::Utf8Value str(v);
     msg = ToCString(str);
   }
-  const char* returnMsg = w->sync_cb(msg.c_str(), w->table_index);
+  const char* returnMsg = recvSyncCb((char*)msg.c_str(), w->sync_cb);
   Local<String> returnV = String::NewFromUtf8(w->isolate, returnMsg);
   args.GetReturnValue().Set(returnV);
 }
@@ -326,8 +316,6 @@ const char* worker_send_sync(worker* w, const char* msg) {
   return out.c_str();
 }
 
-static ArrayBufferAllocator array_buffer_allocator;
-
 void v8_init() {
   V8::InitializeICU();
   Platform* platform = platform::CreateDefaultPlatform();
@@ -335,7 +323,7 @@ void v8_init() {
   V8::Initialize();
 }
 
-worker* worker_new(worker_recv_cb cb, worker_recv_sync_cb sync_cb, int table_index) {
+worker* worker_new(void* cb, void* sync_cb) {
   worker* w = new(worker);
 
   Isolate::CreateParams create_params;
@@ -348,7 +336,6 @@ worker* worker_new(worker_recv_cb cb, worker_recv_sync_cb sync_cb, int table_ind
   w->isolate = isolate;
   w->isolate->SetCaptureStackTraceForUncaughtExceptions(true);
   w->isolate->SetData(0, w);
-  w->table_index = table_index;
   w->cb = cb;
   w->sync_cb = sync_cb;
 
