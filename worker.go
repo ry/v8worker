@@ -19,11 +19,13 @@ var (
 	// Don't init V8 more than once.
 	initV8Once sync.Once
 
-	scriptSequence       int = 0
-	scriptSequenceLocker sync.Mutex
+	scriptSequence         int
+	scriptSequenceLocker   sync.Mutex
+	workerIdSequence       int
+	workerIdSequenceLocker sync.Mutex
+	callbacksMapLocker     sync.RWMutex
+	callbacksMap           = make(map[int]*callbacks)
 )
-
-type workerTableIndex int
 
 // To receive messages from javascript...
 type ReceiveMessageCallback func(msg string)
@@ -34,8 +36,12 @@ type ReceiveSyncMessageCallback func(msg string) string
 // This is a golang wrapper around a single V8 Isolate.
 type Worker struct {
 	cWorker *C.worker
-	cb      ReceiveMessageCallback
-	syncCB  ReceiveSyncMessageCallback
+}
+
+// This is a wrapper for worker callbacks
+type callbacks struct {
+	cb     ReceiveMessageCallback
+	syncCB ReceiveSyncMessageCallback
 }
 
 // ScriptOrigin represents V8 class – see http://v8.paulfryzel.com/docs/master/classv8_1_1_script_origin.html
@@ -56,34 +62,46 @@ func Version() string {
 }
 
 //export recvCb
-func recvCb(msg_s *C.char, ptr unsafe.Pointer) {
+func recvCb(msg_s *C.char, workerId int) {
 	msg := C.GoString(msg_s)
-	f := *(*ReceiveMessageCallback)(ptr)
-	f(msg)
+	callbacksMapLocker.RLock()
+	callbacksMap[workerId].cb(msg)
+	callbacksMapLocker.RUnlock()
 }
 
 //export recvSyncCb
-func recvSyncCb(msg_s *C.char, ptr unsafe.Pointer) *C.char {
+func recvSyncCb(msg_s *C.char, workerId int) *C.char {
 	msg := C.GoString(msg_s)
-	f := *(*ReceiveSyncMessageCallback)(ptr)
-	return C.CString(f(msg))
+	callbacksMapLocker.RLock()
+	res := callbacksMap[workerId].syncCB(msg)
+	callbacksMapLocker.RUnlock()
+	return C.CString(res)
 }
 
 // New creates a new worker, which corresponds to a V8 isolate. A single threaded
 // standalone execution context.
 func New(cb ReceiveMessageCallback, syncCB ReceiveSyncMessageCallback) *Worker {
-	worker := &Worker{
+	id := nextWorkerId()
+
+	cbWrapper := &callbacks{
 		cb:     cb,
 		syncCB: syncCB,
 	}
+	callbacksMapLocker.Lock()
+	callbacksMap[id] = cbWrapper
+	callbacksMapLocker.Unlock()
 
 	initV8Once.Do(func() {
 		C.v8_init()
 	})
 
-	worker.cWorker = C.worker_new(unsafe.Pointer(&worker.cb), unsafe.Pointer(&worker.syncCB))
+	worker := &Worker{}
+	worker.cWorker = C.worker_new(C.int(id))
 	runtime.SetFinalizer(worker, func(final_worker *Worker) {
 		C.worker_dispose(final_worker.cWorker)
+		callbacksMapLocker.Lock()
+		delete(callbacksMap, id)
+		callbacksMapLocker.Unlock()
 	})
 	return worker
 }
@@ -153,6 +171,14 @@ func (w *Worker) SendSync(msg string) string {
 // TerminateExecution terminates execution of javascript
 func (w *Worker) TerminateExecution() {
 	C.worker_terminate_execution(w.cWorker)
+}
+
+func nextWorkerId() int {
+	workerIdSequenceLocker.Lock()
+	seq := workerIdSequence
+	workerIdSequence++
+	workerIdSequenceLocker.Unlock()
+	return seq
 }
 
 func nextScriptName() string {

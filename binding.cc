@@ -21,14 +21,13 @@ class ArrayBufferAllocator : public ArrayBuffer::Allocator {
 };
 
 struct worker_s {
+  int id;
   Isolate* isolate;
   ArrayBufferAllocator allocator;
   std::string last_exception;
   Persistent<Function> recv;
   Persistent<Context> context;
   Persistent<Function> recv_sync_handler;
-  void* cb;
-  void* sync_cb;
 };
 
 // Extracts a C string from a V8 Utf8Value.
@@ -223,7 +222,7 @@ void Send(const FunctionCallbackInfo<Value>& args) {
   }
 
   // XXX should we use Unlocker?
-  recvCb((char*)msg.c_str(), w->cb);
+  recvCb((char*)msg.c_str(), w->id);
 }
 
 // Called from javascript using $request.
@@ -248,7 +247,7 @@ void SendSync(const FunctionCallbackInfo<Value>& args) {
     String::Utf8Value str(v);
     msg = ToCString(str);
   }
-  const char* returnMsg = recvSyncCb((char*)msg.c_str(), w->sync_cb);
+  const char* returnMsg = recvSyncCb((char*)msg.c_str(), w->id);
   Local<String> returnV = String::NewFromUtf8(w->isolate, returnMsg);
   args.GetReturnValue().Set(returnV);
 }
@@ -323,7 +322,7 @@ void v8_init() {
   V8::Initialize();
 }
 
-worker* worker_new(void* cb, void* sync_cb) {
+worker* worker_new(int worker_id) {
   worker* w = new(worker);
 
   Isolate::CreateParams create_params;
@@ -336,8 +335,7 @@ worker* worker_new(void* cb, void* sync_cb) {
   w->isolate = isolate;
   w->isolate->SetCaptureStackTraceForUncaughtExceptions(true);
   w->isolate->SetData(0, w);
-  w->cb = cb;
-  w->sync_cb = sync_cb;
+  w->id = worker_id;
 
   Local<ObjectTemplate> global = ObjectTemplate::New(w->isolate);
 

@@ -11,7 +11,7 @@ const char* worker_version();
 
 void v8_init();
 
-worker* worker_new(void* cb, void* sync_cb);
+worker* worker_new(int worker_id);
 
 // returns nonzero on error
 // get error from worker_last_exception
