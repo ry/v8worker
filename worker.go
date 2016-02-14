@@ -65,16 +65,18 @@ func Version() string {
 func recvCb(msg_s *C.char, workerId int) {
 	msg := C.GoString(msg_s)
 	callbacksMapLocker.RLock()
-	callbacksMap[workerId].cb(msg)
+	fn := callbacksMap[workerId].cb
 	callbacksMapLocker.RUnlock()
+	fn(msg)
 }
 
 //export recvSyncCb
 func recvSyncCb(msg_s *C.char, workerId int) *C.char {
 	msg := C.GoString(msg_s)
 	callbacksMapLocker.RLock()
-	res := callbacksMap[workerId].syncCB(msg)
+	fn := callbacksMap[workerId].syncCB
 	callbacksMapLocker.RUnlock()
+	res := fn(msg)
 	return C.CString(res)
 }
 
