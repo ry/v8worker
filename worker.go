@@ -7,22 +7,25 @@ package v8worker
 #include "binding.h"
 */
 import "C"
-import "errors"
+import (
+	"errors"
+	"runtime"
+	"strconv"
+	"sync"
+	"unsafe"
+)
 
-import "unsafe"
-import "sync"
-import "runtime"
+var (
+	// Don't init V8 more than once.
+	initV8Once sync.Once
 
-type workerTableIndex int
-
-var workerTableLock sync.Mutex
-
-// This table will store all pointers to all active workers. Because we can't safely
-// pass pointers to Go objects to C, we instead pass a key to this table.
-var workerTable = make(map[workerTableIndex]*Worker)
-
-// Keeps track of the last used table index. Incremeneted when a worker is created.
-var workerTableNextAvailable workerTableIndex = 0
+	scriptSequence         int
+	scriptSequenceLocker   sync.Mutex
+	workerIdSequence       int
+	workerIdSequenceLocker sync.Mutex
+	callbacksMapLocker     sync.RWMutex
+	callbacksMap           = make(map[int]*callbacks)
+)
 
 // To receive messages from javascript...
 type ReceiveMessageCallback func(msg string)
@@ -30,83 +33,112 @@ type ReceiveMessageCallback func(msg string)
 // To send a message from javascript and synchronously return a string.
 type ReceiveSyncMessageCallback func(msg string) string
 
-// Don't init V8 more than once.
-var initV8Once sync.Once
-
 // This is a golang wrapper around a single V8 Isolate.
 type Worker struct {
-	cWorker    *C.worker
-	cb         ReceiveMessageCallback
-	sync_cb    ReceiveSyncMessageCallback
-	tableIndex workerTableIndex
+	cWorker *C.worker
 }
 
-// Return the V8 version E.G. "4.3.59"
+// This is a wrapper for worker callbacks
+type callbacks struct {
+	cb     ReceiveMessageCallback
+	syncCB ReceiveSyncMessageCallback
+}
+
+// ScriptOrigin represents V8 class – see http://v8.paulfryzel.com/docs/master/classv8_1_1_script_origin.html
+type ScriptOrigin struct {
+	ScriptName            string
+	LineOffset            int32
+	ColumnOffset          int32
+	IsSharedCrossOrigin   bool
+	ScriptId              int32
+	IsEmbedderDebugScript bool
+	SourceMapURL          string
+	IsOpaque              bool
+}
+
+// Version return the V8 version E.G. "4.3.59"
 func Version() string {
 	return C.GoString(C.worker_version())
 }
 
-func workerTableLookup(index workerTableIndex) *Worker {
-	workerTableLock.Lock()
-	defer workerTableLock.Unlock()
-	return workerTable[index]
-}
-
 //export recvCb
-func recvCb(msg_s *C.char, index workerTableIndex) {
+func recvCb(msg_s *C.char, workerId int) {
 	msg := C.GoString(msg_s)
-	worker := workerTableLookup(index)
-	worker.cb(msg)
+	callbacksMapLocker.RLock()
+	fn := callbacksMap[workerId].cb
+	callbacksMapLocker.RUnlock()
+	fn(msg)
 }
 
 //export recvSyncCb
-func recvSyncCb(msg_s *C.char, index workerTableIndex) *C.char {
+func recvSyncCb(msg_s *C.char, workerId int) *C.char {
 	msg := C.GoString(msg_s)
-	worker := workerTableLookup(index)
-	return_s := C.CString(worker.sync_cb(msg))
-	return return_s
+	callbacksMapLocker.RLock()
+	fn := callbacksMap[workerId].syncCB
+	callbacksMapLocker.RUnlock()
+	res := fn(msg)
+	return C.CString(res)
 }
 
-// Creates a new worker, which corresponds to a V8 isolate. A single threaded
+// New creates a new worker, which corresponds to a V8 isolate. A single threaded
 // standalone execution context.
-func New(cb ReceiveMessageCallback, sync_cb ReceiveSyncMessageCallback) *Worker {
-	workerTableLock.Lock()
-	worker := &Worker{
-		cb:         cb,
-		sync_cb:    sync_cb,
-		tableIndex: workerTableNextAvailable,
-	}
+func New(cb ReceiveMessageCallback, syncCB ReceiveSyncMessageCallback) *Worker {
+	id := nextWorkerId()
 
-	workerTableNextAvailable++
-	workerTable[worker.tableIndex] = worker
-	workerTableLock.Unlock()
+	cbWrapper := &callbacks{
+		cb:     cb,
+		syncCB: syncCB,
+	}
+	callbacksMapLocker.Lock()
+	callbacksMap[id] = cbWrapper
+	callbacksMapLocker.Unlock()
 
 	initV8Once.Do(func() {
 		C.v8_init()
 	})
 
-	callback := C.worker_recv_cb(C.go_recv_cb)
-	receiveSync_callback := C.worker_recv_sync_cb(C.go_recv_sync_cb)
-
-	worker.cWorker = C.worker_new(callback, receiveSync_callback, C.int(worker.tableIndex))
+	worker := &Worker{}
+	worker.cWorker = C.worker_new(C.int(id))
 	runtime.SetFinalizer(worker, func(final_worker *Worker) {
-		workerTableLock.Lock()
-		delete(workerTable, final_worker.tableIndex)
-		workerTableLock.Unlock()
 		C.worker_dispose(final_worker.cWorker)
+		callbacksMapLocker.Lock()
+		delete(callbacksMap, id)
+		callbacksMapLocker.Unlock()
 	})
 	return worker
 }
 
-// Load and executes a javascript file with the filename specified by
+// Load loads and executes a javascript file with the filename specified by
 // scriptName and the contents of the file specified by the param code.
 func (w *Worker) Load(scriptName string, code string) error {
-	scriptName_s := C.CString(scriptName)
-	code_s := C.CString(code)
-	defer C.free(unsafe.Pointer(scriptName_s))
-	defer C.free(unsafe.Pointer(code_s))
+	return w.LoadWithOptions(&ScriptOrigin{ScriptName: scriptName}, code)
+}
 
-	r := C.worker_load(w.cWorker, scriptName_s, code_s)
+// LoadWithOptions loads and executes a javascript file with the ScriptOrigin specified by
+// origin and the contents of the file specified by the param code.
+func (w *Worker) LoadWithOptions(origin *ScriptOrigin, code string) error {
+	cCode := C.CString(code)
+
+	if origin == nil {
+		origin = new(ScriptOrigin)
+	}
+	if origin.ScriptName == "" {
+		origin.ScriptName = nextScriptName()
+	}
+	cScriptName := C.CString(origin.ScriptName)
+	cLineOffset := C.int(origin.LineOffset)
+	cColumnOffset := C.int(origin.ColumnOffset)
+	cIsSharedCrossOrigin := C.bool(origin.IsSharedCrossOrigin)
+	cScriptId := C.int(origin.ScriptId)
+	cIsEmbedderDebugScript := C.bool(origin.IsEmbedderDebugScript)
+	cSourceMapURL := C.CString(origin.SourceMapURL)
+	cIsOpaque := C.bool(origin.IsOpaque)
+
+	defer C.free(unsafe.Pointer(cScriptName))
+	defer C.free(unsafe.Pointer(cCode))
+	defer C.free(unsafe.Pointer(cSourceMapURL))
+
+	r := C.worker_load(w.cWorker, cCode, cScriptName, cLineOffset, cColumnOffset, cIsSharedCrossOrigin, cScriptId, cIsEmbedderDebugScript, cSourceMapURL, cIsOpaque)
 	if r != 0 {
 		errStr := C.GoString(C.worker_last_exception(w.cWorker))
 		return errors.New(errStr)
@@ -114,7 +146,7 @@ func (w *Worker) Load(scriptName string, code string) error {
 	return nil
 }
 
-// Sends a message to a worker. The $recv callback in js will be called.
+// Send sends a message to a worker. The $recv callback in js will be called.
 func (w *Worker) Send(msg string) error {
 	msg_s := C.CString(string(msg))
 	defer C.free(unsafe.Pointer(msg_s))
@@ -138,7 +170,23 @@ func (w *Worker) SendSync(msg string) string {
 	return C.GoString(svalue)
 }
 
-// Terminates execution of javascript
+// TerminateExecution terminates execution of javascript
 func (w *Worker) TerminateExecution() {
 	C.worker_terminate_execution(w.cWorker)
+}
+
+func nextWorkerId() int {
+	workerIdSequenceLocker.Lock()
+	seq := workerIdSequence
+	workerIdSequence++
+	workerIdSequenceLocker.Unlock()
+	return seq
+}
+
+func nextScriptName() string {
+	scriptSequenceLocker.Lock()
+	seq := scriptSequence
+	scriptSequence++
+	scriptSequenceLocker.Unlock()
+	return "VM" + strconv.Itoa(seq)
 }

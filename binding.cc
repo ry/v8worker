@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include <string>
 #include "v8.h"
 #include "libplatform/libplatform.h"
@@ -20,10 +21,7 @@ class ArrayBufferAllocator : public ArrayBuffer::Allocator {
 };
 
 struct worker_s {
-  int x;
-  int table_index;
-  worker_recv_cb cb;
-  worker_recv_sync_cb sync_cb;
+  int id;
   Isolate* isolate;
   ArrayBufferAllocator allocator;
   std::string last_exception;
@@ -100,14 +98,6 @@ std::string ExceptionString(Isolate* isolate, TryCatch* try_catch) {
 extern "C" {
 #include "_cgo_export.h"
 
-void go_recv_cb(const char* msg, int table_index) {
-  recvCb((char*)msg, table_index);
-}
-
-const char* go_recv_sync_cb(const char* msg, int table_index) {
-  return recvSyncCb((char*)msg, table_index);
-}
-
 const char* worker_version() {
   return V8::GetVersion();
 }
@@ -116,7 +106,7 @@ const char* worker_last_exception(worker* w) {
   return w->last_exception.c_str();
 }
 
-int worker_load(worker* w, char* name_s, char* source_s) {
+int worker_load(worker* w, char* source_s, char* name_s, int line_offset_s, int column_offset_s, bool is_shared_cross_origin_s, int script_id_s, bool is_embedder_debug_script_s, char* source_map_url_s, bool is_opaque_s) {
   Locker locker(w->isolate);
   Isolate::Scope isolate_scope(w->isolate);
   HandleScope handle_scope(w->isolate);
@@ -128,8 +118,15 @@ int worker_load(worker* w, char* name_s, char* source_s) {
 
   Local<String> name = String::NewFromUtf8(w->isolate, name_s);
   Local<String> source = String::NewFromUtf8(w->isolate, source_s);
+  Local<Integer> line_offset = Integer::New(w->isolate, line_offset_s);
+  Local<Integer> column_offset = Integer::New(w->isolate, column_offset_s);
+  Local<Boolean> is_shared_cross_origin = Boolean::New(w->isolate, is_shared_cross_origin_s);
+  Local<Integer> script_id = Integer::New(w->isolate, script_id_s);
+  Local<Boolean> is_embedder_debug_script = Boolean::New(w->isolate, is_embedder_debug_script_s);
+  Local<String> source_map_url = String::NewFromUtf8(w->isolate, source_map_url_s);
+  Local<Boolean> is_opaque = Boolean::New(w->isolate, is_opaque_s);
 
-  ScriptOrigin origin(name);
+  ScriptOrigin origin(name, line_offset, column_offset, is_shared_cross_origin, script_id, is_embedder_debug_script, source_map_url, is_opaque);
 
   Local<Script> script = Script::Compile(source, &origin);
 
@@ -225,7 +222,7 @@ void Send(const FunctionCallbackInfo<Value>& args) {
   }
 
   // XXX should we use Unlocker?
-  w->cb(msg.c_str(), w->table_index);
+  recvCb((char*)msg.c_str(), w->id);
 }
 
 // Called from javascript using $request.
@@ -250,7 +247,7 @@ void SendSync(const FunctionCallbackInfo<Value>& args) {
     String::Utf8Value str(v);
     msg = ToCString(str);
   }
-  const char* returnMsg = w->sync_cb(msg.c_str(), w->table_index);
+  const char* returnMsg = recvSyncCb((char*)msg.c_str(), w->id);
   Local<String> returnV = String::NewFromUtf8(w->isolate, returnMsg);
   args.GetReturnValue().Set(returnV);
 }
@@ -318,8 +315,6 @@ const char* worker_send_sync(worker* w, const char* msg) {
   return out.c_str();
 }
 
-static ArrayBufferAllocator array_buffer_allocator;
-
 void v8_init() {
   V8::InitializeICU();
   Platform* platform = platform::CreateDefaultPlatform();
@@ -327,7 +322,7 @@ void v8_init() {
   V8::Initialize();
 }
 
-worker* worker_new(worker_recv_cb cb, worker_recv_sync_cb sync_cb, int table_index) {
+worker* worker_new(int worker_id) {
   worker* w = new(worker);
 
   Isolate::CreateParams create_params;
@@ -340,9 +335,7 @@ worker* worker_new(worker_recv_cb cb, worker_recv_sync_cb sync_cb, int table_ind
   w->isolate = isolate;
   w->isolate->SetCaptureStackTraceForUncaughtExceptions(true);
   w->isolate->SetData(0, w);
-  w->table_index = table_index;
-  w->cb = cb;
-  w->sync_cb = sync_cb;
+  w->id = worker_id;
 
   Local<ObjectTemplate> global = ObjectTemplate::New(w->isolate);
 
