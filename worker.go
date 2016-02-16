@@ -19,7 +19,7 @@ var workerTableLock sync.Mutex
 
 // This table will store all pointers to all active workers. Because we can't safely
 // pass pointers to Go objects to C, we instead pass a key to this table.
-var workerTable = make(map[workerTableIndex]*Worker)
+var workerTable = make(map[workerTableIndex]*worker)
 
 // Keeps track of the last used table index. Incremeneted when a worker is created.
 var workerTableNextAvailable workerTableIndex = 0
@@ -33,12 +33,18 @@ type ReceiveSyncMessageCallback func(msg string) string
 // Don't init V8 more than once.
 var initV8Once sync.Once
 
-// This is a golang wrapper around a single V8 Isolate.
-type Worker struct {
+// Internal worker struct which is stored in the workerTable.
+// Weak-ref pattern https://groups.google.com/forum/#!topic/golang-nuts/1ItNOOj8yW8/discussion
+type worker struct {
 	cWorker    *C.worker
 	cb         ReceiveMessageCallback
 	sync_cb    ReceiveSyncMessageCallback
 	tableIndex workerTableIndex
+}
+
+// This is a golang wrapper around a single V8 Isolate.
+type Worker struct {
+	*worker
 }
 
 // Return the V8 version E.G. "4.3.59"
@@ -46,7 +52,7 @@ func Version() string {
 	return C.GoString(C.worker_version())
 }
 
-func workerTableLookup(index workerTableIndex) *Worker {
+func workerTableLookup(index workerTableIndex) *worker {
 	workerTableLock.Lock()
 	defer workerTableLock.Unlock()
 	return workerTable[index]
@@ -55,15 +61,15 @@ func workerTableLookup(index workerTableIndex) *Worker {
 //export recvCb
 func recvCb(msg_s *C.char, index workerTableIndex) {
 	msg := C.GoString(msg_s)
-	worker := workerTableLookup(index)
-	worker.cb(msg)
+	w := workerTableLookup(index)
+	w.cb(msg)
 }
 
 //export recvSyncCb
 func recvSyncCb(msg_s *C.char, index workerTableIndex) *C.char {
 	msg := C.GoString(msg_s)
-	worker := workerTableLookup(index)
-	return_s := C.CString(worker.sync_cb(msg))
+	w := workerTableLookup(index)
+	return_s := C.CString(w.sync_cb(msg))
 	return return_s
 }
 
@@ -71,14 +77,14 @@ func recvSyncCb(msg_s *C.char, index workerTableIndex) *C.char {
 // standalone execution context.
 func New(cb ReceiveMessageCallback, sync_cb ReceiveSyncMessageCallback) *Worker {
 	workerTableLock.Lock()
-	worker := &Worker{
+	w := &worker{
 		cb:         cb,
 		sync_cb:    sync_cb,
 		tableIndex: workerTableNextAvailable,
 	}
 
 	workerTableNextAvailable++
-	workerTable[worker.tableIndex] = worker
+	workerTable[w.tableIndex] = w
 	workerTableLock.Unlock()
 
 	initV8Once.Do(func() {
@@ -88,14 +94,18 @@ func New(cb ReceiveMessageCallback, sync_cb ReceiveSyncMessageCallback) *Worker 
 	callback := C.worker_recv_cb(C.go_recv_cb)
 	receiveSync_callback := C.worker_recv_sync_cb(C.go_recv_sync_cb)
 
-	worker.cWorker = C.worker_new(callback, receiveSync_callback, C.int(worker.tableIndex))
-	runtime.SetFinalizer(worker, func(final_worker *Worker) {
+	w.cWorker = C.worker_new(callback, receiveSync_callback, C.int(w.tableIndex))
+
+	externalWorker := &Worker{worker: w}
+
+	runtime.SetFinalizer(externalWorker, func(final_worker *Worker) {
 		workerTableLock.Lock()
-		delete(workerTable, final_worker.tableIndex)
+		w := final_worker.worker
+		delete(workerTable, w.tableIndex)
 		workerTableLock.Unlock()
-		C.worker_dispose(final_worker.cWorker)
+		C.worker_dispose(w.cWorker)
 	})
-	return worker
+	return externalWorker
 }
 
 // Load and executes a javascript file with the filename specified by
@@ -106,9 +116,9 @@ func (w *Worker) Load(scriptName string, code string) error {
 	defer C.free(unsafe.Pointer(scriptName_s))
 	defer C.free(unsafe.Pointer(code_s))
 
-	r := C.worker_load(w.cWorker, scriptName_s, code_s)
+	r := C.worker_load(w.worker.cWorker, scriptName_s, code_s)
 	if r != 0 {
-		errStr := C.GoString(C.worker_last_exception(w.cWorker))
+		errStr := C.GoString(C.worker_last_exception(w.worker.cWorker))
 		return errors.New(errStr)
 	}
 	return nil
@@ -119,9 +129,9 @@ func (w *Worker) Send(msg string) error {
 	msg_s := C.CString(string(msg))
 	defer C.free(unsafe.Pointer(msg_s))
 
-	r := C.worker_send(w.cWorker, msg_s)
+	r := C.worker_send(w.worker.cWorker, msg_s)
 	if r != 0 {
-		errStr := C.GoString(C.worker_last_exception(w.cWorker))
+		errStr := C.GoString(C.worker_last_exception(w.worker.cWorker))
 		return errors.New(errStr)
 	}
 
@@ -134,11 +144,11 @@ func (w *Worker) SendSync(msg string) string {
 	msg_s := C.CString(string(msg))
 	defer C.free(unsafe.Pointer(msg_s))
 
-	svalue := C.worker_send_sync(w.cWorker, msg_s)
+	svalue := C.worker_send_sync(w.worker.cWorker, msg_s)
 	return C.GoString(svalue)
 }
 
 // Terminates execution of javascript
 func (w *Worker) TerminateExecution() {
-	C.worker_terminate_execution(w.cWorker)
+	C.worker_terminate_execution(w.worker.cWorker)
 }
