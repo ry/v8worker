@@ -91,10 +91,7 @@ func New(cb ReceiveMessageCallback, sync_cb ReceiveSyncMessageCallback) *Worker 
 		C.v8_init()
 	})
 
-	callback := C.worker_recv_cb(C.go_recv_cb)
-	receiveSync_callback := C.worker_recv_sync_cb(C.go_recv_sync_cb)
-
-	w.cWorker = C.worker_new(callback, receiveSync_callback, C.int(w.tableIndex))
+	w.cWorker = C.worker_new(C.int(w.tableIndex))
 
 	externalWorker := &Worker{worker: w}
 

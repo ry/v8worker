@@ -22,8 +22,6 @@ class ArrayBufferAllocator : public ArrayBuffer::Allocator {
 struct worker_s {
   int x;
   int table_index;
-  worker_recv_cb cb;
-  worker_recv_sync_cb sync_cb;
   Isolate* isolate;
   ArrayBufferAllocator allocator;
   std::string last_exception;
@@ -225,7 +223,7 @@ void Send(const FunctionCallbackInfo<Value>& args) {
   }
 
   // XXX should we use Unlocker?
-  w->cb(msg.c_str(), w->table_index);
+  go_recv_cb(msg.c_str(), w->table_index);
 }
 
 // Called from javascript using $request.
@@ -250,7 +248,7 @@ void SendSync(const FunctionCallbackInfo<Value>& args) {
     String::Utf8Value str(v);
     msg = ToCString(str);
   }
-  const char* returnMsg = w->sync_cb(msg.c_str(), w->table_index);
+  const char* returnMsg = go_recv_sync_cb(msg.c_str(), w->table_index);
   Local<String> returnV = String::NewFromUtf8(w->isolate, returnMsg);
   args.GetReturnValue().Set(returnV);
 }
@@ -327,7 +325,7 @@ void v8_init() {
   V8::Initialize();
 }
 
-worker* worker_new(worker_recv_cb cb, worker_recv_sync_cb sync_cb, int table_index) {
+worker* worker_new(int table_index) {
   worker* w = new(worker);
 
   Isolate::CreateParams create_params;
@@ -341,8 +339,6 @@ worker* worker_new(worker_recv_cb cb, worker_recv_sync_cb sync_cb, int table_ind
   w->isolate->SetCaptureStackTraceForUncaughtExceptions(true);
   w->isolate->SetData(0, w);
   w->table_index = table_index;
-  w->cb = cb;
-  w->sync_cb = sync_cb;
 
   Local<ObjectTemplate> global = ObjectTemplate::New(w->isolate);
 
