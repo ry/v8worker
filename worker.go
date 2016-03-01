@@ -108,6 +108,12 @@ func New(cb ReceiveMessageCallback, syncCB ReceiveSyncMessageCallback) *Worker {
 	return worker
 }
 
+// Optional notification that the embedder is idle.
+// http://v8.paulfryzel.com/docs/master/classv8_1_1_isolate.html#aba794ed25d4fa8780b3a07c66a5e5d4a
+func (w *Worker) IdleNotificationDeadline(deadLineInSeconds float64) bool {
+	return bool(C.worker_idle_notification_deadline(w.cWorker, C.double(deadLineInSeconds)))
+}
+
 // Load loads and executes a javascript file with the filename specified by
 // scriptName and the contents of the file specified by the param code.
 func (w *Worker) Load(scriptName string, code string) error {
@@ -144,6 +150,13 @@ func (w *Worker) LoadWithOptions(origin *ScriptOrigin, code string) error {
 		return errors.New(errStr)
 	}
 	return nil
+}
+
+// LowMemoryNotification for optional notification that the system is running low on memory.
+// V8 uses these notifications to attempt to free memory.
+// http://v8.paulfryzel.com/docs/master/classv8_1_1_isolate.html#aaf446f4877e4707a93d2c406fffd9fd6
+func (w *Worker) LowMemoryNotification() {
+	C.worker_low_memory_notification(w.cWorker)
 }
 
 // Send sends a message to a worker. The $recv callback in js will be called.

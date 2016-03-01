@@ -147,6 +147,14 @@ int worker_load(worker* w, char* source_s, char* name_s, int line_offset_s, int 
   return 0;
 }
 
+void worker_low_memory_notification(worker* w) {
+  w->isolate->LowMemoryNotification();
+}
+
+bool worker_idle_notification_deadline(worker* w, double deadline_in_seconds) {
+  return w->isolate->IdleNotificationDeadline(deadline_in_seconds);
+}
+
 void Print(const FunctionCallbackInfo<Value>& args) {
   bool first = true;
   for (int i = 0; i < args.Length(); i++) {

@@ -24,6 +24,8 @@ const char* worker_send_sync(worker* w, const char* msg);
 
 void worker_dispose(worker* w);
 void worker_terminate_execution(worker* w);
+void worker_low_memory_notification(worker* w);
+bool worker_idle_notification_deadline(worker* w, double deadline_in_seconds);
 
 #ifdef __cplusplus
 } // extern "C"
