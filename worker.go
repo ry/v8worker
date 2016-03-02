@@ -11,7 +11,6 @@ import "errors"
 
 import "unsafe"
 import "sync"
-import "runtime"
 
 type workerTableIndex int
 
@@ -94,14 +93,7 @@ func New(cb ReceiveMessageCallback, sync_cb ReceiveSyncMessageCallback) *Worker 
 	w.cWorker = C.worker_new(C.int(w.tableIndex))
 
 	externalWorker := &Worker{worker: w}
-
-	runtime.SetFinalizer(externalWorker, func(final_worker *Worker) {
-		workerTableLock.Lock()
-		w := final_worker.worker
-		delete(workerTable, w.tableIndex)
-		workerTableLock.Unlock()
-		C.worker_dispose(w.cWorker)
-	})
+	
 	return externalWorker
 }
 
@@ -148,4 +140,12 @@ func (w *Worker) SendSync(msg string) string {
 // Terminates execution of javascript
 func (w *Worker) TerminateExecution() {
 	C.worker_terminate_execution(w.worker.cWorker)
+}
+
+// Dispose worker and free memory
+func (w *Worker) Dispose() {
+	workerTableLock.Lock()
+	delete(workerTable, w.tableIndex)
+	workerTableLock.Unlock()
+	C.worker_dispose(w.worker.cWorker)
 }
