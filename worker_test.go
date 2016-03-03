@@ -195,3 +195,25 @@ func TestWorkerBreaking(t *testing.T) {
 
 	worker.Load("forever.js", ` while (true) { ; } `)
 }
+
+func TestTightCreateLoop(t *testing.T) {
+	println("create 3000 workers in tight loop to see if we get OOM")
+	for i := 0; i < 3000; i++ {
+		runSimpleWorker(t)
+	}
+	println("success")
+}
+
+func runSimpleWorker(t *testing.T) {
+	w := New(nil, nil)
+	defer w.Dispose()
+
+	err := w.Load("mytest.js", `
+	               // Do something
+	               var something = "Simple JavaScript";
+	       `)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+}

@@ -45,6 +45,7 @@ type worker struct {
 // This is a golang wrapper around a single V8 Isolate.
 type Worker struct {
 	*worker
+	disposed bool
 }
 
 // Return the V8 version E.G. "4.3.59"
@@ -93,16 +94,29 @@ func New(cb ReceiveMessageCallback, sync_cb ReceiveSyncMessageCallback) *Worker 
 
 	w.cWorker = C.worker_new(C.int(w.tableIndex))
 
-	externalWorker := &Worker{worker: w}
+	externalWorker := &Worker{
+		worker:   w,
+		disposed: false,
+	}
 
 	runtime.SetFinalizer(externalWorker, func(final_worker *Worker) {
-		workerTableLock.Lock()
-		w := final_worker.worker
-		delete(workerTable, w.tableIndex)
-		workerTableLock.Unlock()
-		C.worker_dispose(w.cWorker)
+		final_worker.Dispose()
 	})
 	return externalWorker
+}
+
+// Forcefully frees up memory associated with worker.
+// GC will also free up worker memory so calling this isn't strictly necessary.
+func (w *Worker) Dispose() {
+	if w.disposed {
+		panic("worker already disposed")
+	}
+	w.disposed = true
+	workerTableLock.Lock()
+	internalWorker := w.worker
+	delete(workerTable, internalWorker.tableIndex)
+	workerTableLock.Unlock()
+	C.worker_dispose(internalWorker.cWorker)
 }
 
 // Load and executes a javascript file with the filename specified by
