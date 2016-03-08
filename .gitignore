@@ -7,3 +7,5 @@ v8
 .svn
 v8worker.test
 out/
+examples/commonjs/commonjs
+examples/handle-json/handle-json
