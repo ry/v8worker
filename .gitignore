@@ -6,3 +6,4 @@ v8
 *.swp
 .svn
 v8worker.test
+out/
