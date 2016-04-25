@@ -98,14 +98,6 @@ std::string ExceptionString(Isolate* isolate, TryCatch* try_catch) {
 extern "C" {
 #include "_cgo_export.h"
 
-void go_recv_cb(const char* msg, int table_index) {
-  recvCb((char*)msg, table_index);
-}
-
-const char* go_recv_sync_cb(const char* msg, int table_index) {
-  return recvSyncCb((char*)msg, table_index);
-}
-
 const char* worker_version() {
   return V8::GetVersion();
 }
@@ -223,7 +215,7 @@ void Send(const FunctionCallbackInfo<Value>& args) {
   }
 
   // XXX should we use Unlocker?
-  go_recv_cb(msg.c_str(), w->table_index);
+  recvCb((char*)msg.c_str(), w->table_index);
 }
 
 // Called from javascript using $request.
@@ -248,9 +240,10 @@ void SendSync(const FunctionCallbackInfo<Value>& args) {
     String::Utf8Value str(v);
     msg = ToCString(str);
   }
-  const char* returnMsg = go_recv_sync_cb(msg.c_str(), w->table_index);
+  char* returnMsg = recvSyncCb((char*)msg.c_str(), w->table_index);
   Local<String> returnV = String::NewFromUtf8(w->isolate, returnMsg);
   args.GetReturnValue().Set(returnV);
+  free(returnMsg);
 }
 
 // Called from golang. Must route message to javascript lang.

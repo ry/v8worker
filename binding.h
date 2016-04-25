@@ -3,9 +3,6 @@ extern "C" {
 #endif
 
 
-void go_recv_cb(const char* msg, int table_index);
-const char* go_recv_sync_cb(const char* msg, int table_index);
-
 struct worker_s;
 typedef struct worker_s worker;
 
