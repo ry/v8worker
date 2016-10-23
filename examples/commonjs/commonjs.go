@@ -59,7 +59,7 @@ func (m *module) load() {
 }
 
 // Adapted from node.js source:
-// see https://github.com/nodejs/node/blob/master/src/node.js#L871
+// see https://github.com/nodejs/node/blob/master/lib/internal/bootstrap_node.js#L396
 const nativeModule = `
 	'use strict';
 
